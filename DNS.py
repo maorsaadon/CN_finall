@@ -52,7 +52,7 @@ def getflags(flags):
 
 def getquestiondomain(data):
     state = 0
-    expectedlength = 0;
+    expectedlength = 0
     domainstring = ''
     domainparts = []
     x = 0

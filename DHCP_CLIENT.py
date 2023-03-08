@@ -1,48 +1,45 @@
 from scapy.all import *
-import random
 
 from scapy.layers.dhcp import DHCP, BOOTP
 from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
 
 
-class DhcpClient:
-    def __init__(self):
-        self.mac_address = get_if_hwaddr(conf.iface)
-        self.ip_address = None
 
-    def send_discover_packet(self):
-        discover = Ether(src=self.mac_address, dst='ff:ff:ff:ff:ff:ff') / \
-                   IP(src='0.0.0.0', dst='255.255.255.255') / \
-                   UDP(sport=68, dport=67) / \
-                   BOOTP(op=1, chaddr=self.mac_address) / \
-                   DHCP(options=[('message-type', 'discover'), 'end'])
+mac_address = get_if_hwaddr(conf.iface)
+ip_address = None
+ 
 
-        offer = srp1(discover, iface=conf.iface, timeout=10)
-        if offer and offer[DHCP] and offer[DHCP].options[0][1] == 2:  # DHCP Offer
-            self.ip_address = offer[BOOTP].yiaddr
+def handle_offer_packet(packet):
+    print("got offer")
+    send_request_packet(packet)
 
-    def send_request_packet(self):
-        request = Ether(src=self.mac_address, dst='ff:ff:ff:ff:ff:ff') / \
-                  IP(src='0.0.0.0', dst='255.255.255.255') / \
-                  UDP(sport=68, dport=67) / \
-                  BOOTP(op=1, chaddr=self.mac_address) / \
-                  DHCP(options=[('message-type', 'request'),
-                                ('requested_addr', self.ip_address),
-                                ('server_id', self.offer[DHCP].options[1][1]), 'end'])
+def handle_ack_packet(packet):
+    print("got acknowledge")
 
-        ack = srp1(request, iface=conf.iface, timeout=10)
-        if ack and ack[DHCP] and ack[DHCP].options[0][1] == 5:  # DHCP Ack
-            print(f"DHCP IP address assignment successful. Assigned IP: {self.ip_address}")
-        else:
-            print("DHCP IP address assignment failed.")
+def send_discover_packet():
+    discover = Ether(src=mac_address, dst='ff:ff:ff:ff:ff:ff') / \
+                IP(src='0.0.0.0', dst='255.255.255.255') / \
+                UDP(sport=68, dport=67) / \
+                BOOTP(op=1, chaddr=mac_address) / \
+                DHCP(options=[('message-type', 'discover'), 'end', 'pad'])
 
-    def run(self):
-        self.send_discover_packet()
-        if self.ip_address:
-            self.send_request_packet()
+    sendp(discover)
+
+    sniff(prn=handle_offer_packet, filter='(port 67 or port 68)', count=1)
+
+def send_request_packet(offer):
+    request = Ether(src=mac_address, dst='ff:ff:ff:ff:ff:ff') / \
+                IP(src='0.0.0.0', dst='255.255.255.255') / \
+                UDP(sport=68, dport=67) / \
+                BOOTP(op=1, chaddr=mac_address) / \
+                DHCP(options=[('message-type', 'request'),
+                            ('requested_addr', ip_address), 
+                            ('server_id', offer[DHCP].options[1][1]), 'end', 'pad'])
+    time.sleep(1)
+    sendp(request)
+
+    sniff(prn=handle_ack_packet, filter='(port 67 or port 68)', count=1)
 
 
-if __name__ == '__main__':
-    client = DhcpClient()
-    client.run()
+send_discover_packet()

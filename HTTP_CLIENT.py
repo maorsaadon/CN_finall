@@ -9,7 +9,7 @@ CHUNK_SIZE = 1024
 def main():
     # send GET request to server
     request = b'GET /file.txt HTTP/1.1\r\nHost: localhost\r\n\r\n'
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
         s.sendall(request)
         # receive response headers

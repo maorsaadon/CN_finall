@@ -1,177 +1,230 @@
 import socket, glob, json
+from scapy.all import DNS
 
-port = 53
-ip = '127.0.0.1'
+def get_bit (value, bit_index):
+    return (value >> bit_index) & 1
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind((ip, port))
+def getFlagsByBit (flags):
 
+    first_byte = bytes(flags[:1])
+    second_byte = bytes(flags[1:2])
 
-def load_zones():
-    jsonzone = {}
-    zonefiles = glob.glob('zones/*.zone')
-
-    for zone in zonefiles:
-        with open(zone) as zonedata:
-            data = json.load(zonedata)
-            zonename = data["$origin"]
-            jsonzone[zonename] = data
-
-    return jsonzone
-
-
-zonedata = load_zones()
-
-
-def getflags(flags):
-    byte1 = bytes(flags[:1])
-    byte2 = bytes(flags[1:2])
-
-    rflags = ''
-
-    QR = '1'
+    QR  = get_bit(first_byte,0)
 
     OPCODE = ''
-    for bit in range(1, 5):
-        OPCODE += str(ord(byte1) & (1 << bit))
+    for bit in range (1,5):
+        #the ord function returns the integer that represents the character - ASCI
+        #the first bit is the QR Flag
+        OPCODE += str(ord(first_byte)&(1<<bit)) 
+
+    #NEED TO CHECK THESE FLAGS!!! -
+    #TO DO MASK FOR EVERY FLAG HERE
+    AA = get_bit(first_byte,5)
+    TC = get_bit(first_byte,6)
+    RD = get_bit(first_byte,7)       
+
+    #second_byte
+    RA = get_bit(second_byte,0)
+
+    Z = ''
+    for bit in range (1,4):
+        #the ord function returns the integer that represents the character - ASCI
+        #the first bit is the QR Flag
+        Z += str(ord(second_byte)&(1<<bit)) 
+
+    #CHECK THIS MASKING!!!
+    RCODE = ''
+    for bit in range (1,4):
+        #the ord function returns the integer that represents the character - ASCI
+        #the first bit is the QR Flag
+        RCODE += str(ord(second_byte)&(1<<bit))
+
+    responseFlag = int(QR+ OPCODE + AA + TC + RD, 2).to_bytes(1, byteorder='big') + int(RA + Z + RCODE, 2).to_bytes(1, byteorder='big')
+
+    return responseFlag
+
+def get_flags (flags):
+
+    first_byte = bytes(flags[:1])
+
+    QR  = '1'
+
+    OPCODE = ''
+    for bit in range (1,5):
+        #the ord function returns the integer that represents the character - ASCI
+        #the first bit is the QR Flag
+        OPCODE += str(ord(first_byte)&(1<<bit)) 
+
+    #NEED TO CHECK THESE FLAGS!!! -
+    #TO DO MASK FOR EVERY FLAG HERE
     AA = '1'
-
     TC = '0'
+    RD = '0'       
 
-    RD = '0'
-
+    #second_byte
     RA = '0'
-
     Z = '000'
-
     RCODE = '0000'
 
-    return int(QR + OPCODE + AA + TC + RD, 2).to_bytes(1, byteorder='big') + int(RA + Z + RCODE, 2).to_bytes(1,
-                                                                                                             byteorder='big')
+    responseFlag = int(QR+ OPCODE + AA + TC + RD, 2).to_bytes(1, byteorder='big') + int(RA + Z + RCODE, 2).to_bytes(1, byteorder='big')
 
+    return responseFlag
 
-def getquestiondomain(data):
+def get_question_domain(data):
+
     state = 0
-    expectedlength = 0
-    domainstring = ''
-    domainparts = []
-    x = 0
-    y = 0
+    exceptedLength = 0
+    domainString = ''
+    domainParts =[]
+    letters = 0
+    index = 0 
+
     for byte in data:
         if state == 1:
             if byte != 0:
-                domainstring += chr(byte)
-            x += 1
-            if x == expectedlength:
-                domainparts.append(domainstring)
-                domainstring = ''
+                domainString += chr(byte)
+            letters += 1
+            if letters == exceptedLength:
+                domainParts.append(domainString)
+                domainString = ''
                 state = 0
-                x = 0
+                letters = 0
             if byte == 0:
-                domainparts.append(domainstring)
+                domainParts.append(domainString)
+                #we have done to read the domain's name
                 break
         else:
             state = 1
-            expectedlength = byte
-    y += 1
+            exceptedLength = byte
 
-    questiontype = data[y:y + 2]
+        index += 1
 
-    return domainparts, questiontype
+    quetionType = data[index:index+2]
 
+    return (domainParts, quetionType)
 
-def getzone(domain):
-    global zonedata
+def load_zone():
+    jsonZone = {}
+    zoneFiles = glob.glob('zones/*.zone')
+    
+    for zone in zoneFiles:
+        with open(zone) as zoneData:
+            data = json.load(zoneData)
 
-    zone_name = '.'.join(domain)
-    return zonedata[zone_name]
+            zoneName = data["$origin"]
+            jsonZone[zoneName] = data
 
+    return jsonZone
 
-def getrecs(data):
-    domain, questiontype = getquestiondomain(data)
+def get_zone(domainName):
+    global zoneData 
+
+    zoneName = '.'.join(domainName)
+
+    return zoneData[zoneName]   
+
+def get_records(data):
+    domainName, questionType = get_question_domain(data)
+
     qt = ''
-    if questiontype == b'\x00\x01':
-        qt = 'a'
+    if questionType == b'\x00\x01':
+        qt = 'A'
+    
+    zone = get_zone(domainName)
 
-    zone = getzone(domain)
+    return (zone[qt], qt, domainName)
 
-    return zone[qt], qt, domain
+def build_query(domainName, recordsType):
+    queryByte = b''
 
+    for level in domainName:
+        queryByte += bytes([len(level)])
 
-def buildquestion(domainname, rectype):
-    qbytes = b''
-
-    for part in domainname:
-        length = len(part)
-        qbytes += bytes([length])
-
-        for char in part:
-            qbytes += ord(char).to_bytes(1, byteorder='big')
-
-    if rectype == 'a':
-        qbytes += (1).to_bytes(2, byteorder='big')
-
-    qbytes += (1).to_bytes(2, byteorder='big')
-
-    return qbytes
+        for letter in level:
+            queryByte += ord(letter).to_bytes(1, byteorder= "big")
 
 
-def rectobytes(domainname, rectype, recttl, recval):
-    rbytes = b'\xc0\x0c'
+    if(recordsType == 'A'):
+        queryByte += (1).to_bytes(2, byteorder= "big")
+        
+    queryByte += (1).to_bytes(2, byteorder= "big")
 
-    if rectype == 'a':
-        rbytes += + bytes([0]) + bytes([1])
+    return queryByte
 
-    rbytes = rbytes + bytes([0]) + bytes([1])
+def record_bytes(domainName,recordType,recordTtl, recordValue):
+    recordBytes = b'\xc0\x0c' 
 
-    rbytes = rbytes + int(recttl).to_bytes(4, byteorder='big')
+    if recordType == 'A':
+        recordBytes += bytes([0]) + bytes([1])
 
-    if rectype == 'a':
-        rbytes = rbytes + bytes([0]) + bytes([4])
+    recordBytes += bytes([0]) + bytes([1])
+    recordBytes += int(recordTtl).to_bytes(4,byteorder='big')
 
-        for part in recval.split('.'):
-            rbytes += bytes([int(part)])
+    if recordType == 'A':
+        recordBytes += bytes([0]) + bytes([4])
 
-    return bytes
-
-
-def buildresponse(data):
-    # Transaction ID
+    for segment in recordValue.split('.'):
+        recordBytes += bytes([int(segment)])
+    
+    return recordBytes
+    
+def build_response(data):
+    #get the Transaction ID
     TransactionID = data[:2]
 
-    # Get the flags
-    Flags = getflags(data[2:4])
-    print(Flags)
+    #get the Flags
+    Flags = get_flags(data[2:4])
 
-    # Question Count
+    #get the Question Count - allways equals to 1
     QDCOUNT = b'\x00\x01'
 
-    # Answer Count
-    ANCOUNT = len(getrecs(data[12:])[0]).to_bytes(2, byteorder='big')
+    #get the Answer Count 
+    ANCOUNT = len(get_records(data[12:])[0]).to_bytes(2, byteorder= "big")
 
-    # Nameserver Count
-    NSCOUNT = (0).to_bytes(2, byteorder='big')
+    #get the Name Server Count
+    #NSCOUNT = b'\x00\x00'
+    NSCOUNT = (0).to_bytes(2, byteorder= "big")
 
-    # Additional Count
-    ARCOUNT = (0).to_bytes(2, byteorder='big')
+    #get the Additional Records Count
+    #ARCOUNT = b'\x00\x00'
+    ARCOUNT = (0).to_bytes(2, byteorder= "big")
 
-    dnsheader = TransactionID + Flags + ANCOUNT + NSCOUNT + ARCOUNT
+    #merge all the headers
+    DNSHeader = TransactionID + Flags + QDCOUNT + ANCOUNT + NSCOUNT + ARCOUNT
 
-    # Create DNS body
-    dnsbody = b''
+    #create the DNS Body
+    DNSBody = b''
 
-    # Get answer for query
-    records, rectype, domainname = getrecs(data[12:])
+    #get the answer for the query
+    records, recordsType, domainName = get_records(data[12:])
 
-    dnsquestion = buildquestion(domainname, rectype)
+    DNSQuery = build_query(domainName, recordsType)
 
     for record in records:
-        dnsbody += rectobytes(domainname, rectype, record["ttl"], record["value"])
+        DNSBody += record_bytes(domainName,recordsType,record['ttl'],record['value'])
 
-    return dnsheader + dnsquestion + dnsbody
+    packet = DNSHeader + DNSQuery + DNSBody 
+    print(DNS(packet).summary())
+    return packet
 
 
-while 1:
-    data, addr = sock.recvfrom(512)
-    r = buildresponse(data)
-    sock.sendto(r, addr)
+if __name__ == '__main__':
+    port = 53
+    ip = '127.0.0.1'
+
+    zoneData = load_zone()
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((ip, port))
+
+
+    while 1:
+        #512 - for udp msg
+        data, addr = sock.recvfrom(512)
+        response = build_response(data)
+        print(response)
+        sock.sendto(response, addr)
+
+
+
+

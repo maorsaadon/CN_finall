@@ -1,7 +1,10 @@
+# Importing necessary modules for packet manipulation
 from scapy.all import *
-
+# Importing modules for handling DHCP packets
 from scapy.layers.dhcp import DHCP, BOOTP
+# Importing modules for handling IP and UDP protocols
 from scapy.layers.inet import IP, UDP
+# Importing module for handling Ethernet frames
 from scapy.layers.l2 import Ether
 
 

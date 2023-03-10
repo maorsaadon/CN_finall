@@ -6,16 +6,19 @@ from scapy.layers.l2 import Ether
 
 
 class DhcpHandler:
+    #Initialize instance variables
     def __init__(self):
         self.ip_pool = ['192.168.0.%d' % i for i in range(100, 200)]
         self.ip_assignments = {}
 
+    #Define a method to get the next available IP address
     def get_next_available_ip(self):
         for ip_address in self.ip_pool:
             if str(ip_address) not in self.ip_assignments:
                 return str(ip_address)
         return None
 
+    # Define a method to handle DHCP packets
     def handle(self, packet):
         if packet[DHCP] and packet[DHCP].options[0][1] == 1: # DHCP Discover
             print("DHCP Discover received")
@@ -75,6 +78,7 @@ class DhcpHandler:
             sendp(ack, iface=conf.iface)
 
 if __name__ == '__main__':
+    # Instantiate a DhcpHandler object 
     handler = DhcpHandler()
-    #capture and process network traffic that matches a specified filter.
+    # capture and process network traffic that matches a specified filter.
     sniff(filter='udp and (port 67 or port 68)', prn=handler.handle)

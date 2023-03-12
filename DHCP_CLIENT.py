@@ -7,13 +7,15 @@ from scapy.layers.l2 import Ether
 
 mac_address = get_if_hwaddr(conf.iface)
 ip_address = None
+DNSserver_ip= None
  
 
 def handle_offer_packet(packet):
     print("DHCP offer received")
     send_request_packet(packet)
 
-def handle_ack_packet(packet):
+def handle_ack_packet(ack):
+    DNSserver_ip = ack[DHCP].options[5][1]
     print("DHCP ack received")
 
 def send_discover_packet():

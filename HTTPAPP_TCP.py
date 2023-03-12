@@ -4,12 +4,10 @@ import requests
 
 HOST = ''
 PORT = 8000
-CHUNK_SIZE = 1000
-id = 0
-
+CHUNK_SIZE = 1024
 
 def main():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, PORT))
         s.listen()
@@ -33,48 +31,12 @@ def main():
                 while response.status_code in (301, 302):
                     url = response.headers['Location']
                     response = requests.request(method, url, headers=headers, allow_redirects=False)
-                
-                found = False
-                if response.status_code == requests.codes.ok:
-                    found = True
-                bytes_response = response_to_bytes(found, url, response)
-                
-                # send headers response to the client
-                conn.send(len(bytes_response))
-                
-                # send response body in chunks using RUDP protocol
-                
-
-def response_to_bytes(found: bool, url: str, res: requests.Response) -> bytes:
-    data = b""
-
-    if not found:
-        data += struct.pack("B", False)
-
-        message = "The URL \"" + url + "\" not found!".encode()
-
-        data += struct.pack("B", len(message))
-        data += message
-
-        return data
-
-    data += struct.pack("B", True)
-
-    headers = build_response_headers(res)
-
-    data += struct.pack("I", len(headers.encode()))
-    data += headers.encode()
-
-    data += struct.pack("I", len(res.encoding.encode()))
-    data += res.encoding.encode()
-
-    data += struct.pack("I",  len(res.status_code))
-    data += res.status_code.encode()
-
-    data += struct.pack("I", len(res.content.encode()))
-    data += res.content.encode()
-
-    return data
+                # send response headers
+                response_headers = build_response_headers(response)
+                conn.sendall(response_headers)
+                 # send response body
+                conn.sendall(response.content)
+          
 
 def parse_request(request):
     request_str = request.decode('utf-8')
@@ -99,4 +61,3 @@ def build_response_headers(response):
 
 if __name__ == '__main__':
     main()
-    

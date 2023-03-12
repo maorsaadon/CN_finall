@@ -20,8 +20,9 @@ def handle_offer_packet(packet):
      # Send a DHCP request packet in response to the offer
     send_request_packet(packet)
 
-def handle_ack_packet(packet):
+def handle_ack_packet(ack):
     print("DHCP ack received")
+    DNSserver_ip= ack[DHCP].options[5][1]
 
 def send_discover_packet():
      # Construct a DHCP Discover packet using the current MAC address as the client identifier

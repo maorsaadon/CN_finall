@@ -179,6 +179,7 @@ class RUDPClient:
         self.outgoing_seq = random.randint(0, (2 ** 16))  # Sequence number for outgoing packets
         self.server_address = None  # tuple: (ip, port)
         self.all_data_received = False
+        self.request_sent = False
         self.request_accepted = False
 
     def connect(self, server_ip, server_port):
@@ -206,11 +207,21 @@ class RUDPClient:
         return False
 
     def send_request(self, request):
-        http_request_packet = struct.pack(FORMAT, self.outgoing_seq, REQUEST_PACKET)
-        self.outgoing_seq += 1
-        http_request_packet += request
-        self.sock.sendto(http_request_packet, self.server_address)
-        self.receive_data()
+        attempts = 10
+        while attempts > 0:
+            try:
+                http_request_packet = struct.pack(FORMAT, self.outgoing_seq, REQUEST_PACKET)
+                self.outgoing_seq += 1
+                http_request_packet += request
+                self.sock.sendto(http_request_packet, self.server_address)
+                self.request_sent = True
+                self.receive_data()
+            except TypeError:
+                attempts -= 1
+                continue
+        if not self.request_sent:
+            print("Something went Wrong! Could not send request....")
+            self.sock.close()
 
     def receive_data(self):
         packets_to_be_received = float('inf')
@@ -286,7 +297,12 @@ def client_request(url, file_name):
     rudp_c.connect(app_server_ip, 30000 + MAOR_LAST3_ID_DIG)
 
     http_request = f"GET /{file_name} HTTP/1.1\r\nHost: {url}\r\n\r\n".encode()
+
     rudp_c.send_request(http_request)
+
+    if not rudp_c.request_sent:
+        return
+
     print("Preparing to download file...\n")
 
     rudp_c.receive_data()

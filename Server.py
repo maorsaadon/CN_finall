@@ -182,7 +182,7 @@ class RUDPServer:
         while not self.file_info_sent and attempts > 0:
             try:
                 type, seq, _, _ = self.receive_packet()
-                if type == ACK_PACKET and seq == seq_sent:
+                if type == ACK_PACKET and seq == seq_to_send:
                     self.file_info_sent = True
                     return
             except socket.timeout:

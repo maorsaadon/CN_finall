@@ -77,20 +77,16 @@ class DHCPClient:
 **************************************************************
 """
 
-import socket
-
 
 class DNSClient:
-    def _init_(self):
+    def __init__(self):
         # Set the IP address and port number for the DNS server
-        self.server_address = ('0.0.0.0', 53)
+        self.server_address = ('127.0.0.1', 53)
         self.domain_ip = None
 
     def query(self, domain):
         # create a UDP socket
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-        # set the DNS server address and port
 
         # construct the DNS query packet
         packet = self.create_dns_packet(domain)
@@ -112,7 +108,7 @@ class DNSClient:
         # close the socket
         client_socket.close()
 
-        return response, self.domain_ip
+        return self.domain_ip 
 
     def create_dns_packet(self, domain):
         # construct the DNS query packet
@@ -263,7 +259,7 @@ def client_request(url, file_name):
     dns_client = DNSClient()
 
     # Query the DNS server for the IP address of downloadmanager.com
-    _, app_server_ip = dns_client.query("downloadmanager.com")
+    app_server_ip = dns_client.query("downloadmanager.com")
 
 
     """
@@ -290,4 +286,4 @@ def client_request(url, file_name):
 
 
 if __name__ == '__main__':
-    client_request("", "")
+    client_request("www.google.com", "index.html")

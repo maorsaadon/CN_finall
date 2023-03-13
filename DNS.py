@@ -2,7 +2,6 @@ import socket
 
 class DNSserver: 
     def __init__(self):
-        self.addresses = {}
         self.ip_domain = None
 
     def recieve_dns_query(self):
@@ -31,9 +30,9 @@ class DNSserver:
         domain = self.extract_domain(query_packet)
 
         # resolve the IP address for the domain name
-        if domain in self.addresses:
-            self.domain_ip = self.addresses[domain]
-            print(f"Resolved {domain} to {self.domain_ip}, using our Database module. ")
+        if domain == 'downloadmanager.com':
+            self.ip_domain = '127.0.0.1'
+            print(f"Resolved {domain} to {self.ip_domain}, using our Database module. ")
         else:
             self.ip_domain = socket.gethostbyname(domain)
             print(f"Resolved {domain} -> {self.ip_domain}, using the socket module.")

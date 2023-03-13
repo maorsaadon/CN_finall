@@ -156,9 +156,6 @@ TIMEOUT = 2
 
 
 def deconstruct_packet(packet):
-    print(type(packet[0]))
-    print(packet)
-    # print(packet[0].decode())
     seq, packet_type = struct.unpack(FORMAT, packet[0][:HEADER_SIZE])
     return {'type': packet_type, 'seq': seq, 'src_address': packet[1], 'data': packet[0][HEADER_SIZE:]}
 

@@ -66,7 +66,6 @@ class RUDPServer:
                     syn_ack_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_ACK_PACKET)
                     self.sock.sendto(syn_ack_packet, address)
                     self.connected = True
-                    print("ready to serve...")
             except socket.timeout:
                 continue
 
@@ -109,17 +108,21 @@ class RUDPServer:
                     self.cwnd = self.slow_start_threshold
                     self.congestion_avoidance = False
 
+
             # send payload
             packets = []
-            first_seq_sent = self.first_seq
-            for i in range(first_seq_sent, max(first_seq_sent + self.cwnd, len(self.packets_to_send))):
-                packets.append(self.packets_to_send[i])
-                self.sent_items[i] = self.packets_to_send[i]
-                self.outgoing_seq += 1
+            first_seq_sent = seq = self.outgoing_seq
+            for i in range(max(self.cwnd, len(self.packets_to_send))):
+                print(self.packets_to_send)
+                print(i)
+                packets.append(self.packets_to_send[seq])
+                self.sent_items[seq] = self.packets_to_send[seq]
+                seq += 1
 
             # Send all the packets at once using the socket
             time_of_sending = time.time()
             self.sock.sendto(b''.join(packets), address)
+            self.outgoing_seq = seq
 
             # receive acks
             try:
@@ -131,7 +134,7 @@ class RUDPServer:
                         # sent packet
                         if seq == first_seq_sent:
                             self.rtt = time_of_sending - time_of_ack
-                            self.sock.settimeout(self.rtt / 2)
+                            self.sock.settimeout(2)
                         self.sent_items.pop(seq)
             except socket.timeout:
                 if len(self.packets_to_send) == len(self.sent_items) == 0:  # all packets were sent and acked
@@ -141,17 +144,19 @@ class RUDPServer:
         self.close_connection()
 
     def construct_payload(self, data):
-        first_seq = self.outgoing_seq
-        seq = first_seq + 1
+        # first_seq = self.outgoing_seq
+        # seq = first_seq #+ 1
+        seq = self.outgoing_seq
         for i in range((self.file_size // CHUNK) + 1):
+            print(seq)
             data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
-            data_packet += data[i * CHUNK:(i + 1) * CHUNK]
+            data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
             self.packets_to_send[seq] = data_packet
             seq += 1
 
-        packet_count_info = struct.pack(FORMAT, first_seq, FILE_SIZE_INFO)
-        packet_count_info += bytes(len(self.packets_to_send))
-        self.packets_to_send[first_seq] = packet_count_info
+        # packet_count_info = struct.pack(FORMAT, first_seq, FILE_SIZE_INFO)
+        # packet_count_info += bytes(len(self.packets_to_send))
+        # self.packets_to_send[first_seq] = packet_count_info
 
     def close_connection(self):
 
@@ -210,10 +215,8 @@ def downloadmanager():
             # http get request
             response = requests.get(url)
             data = response.content
-            print(data) #TODO
+            rudp_s.file_size = len(data)
             rudp_s.construct_payload(data)
-            print(rudp_s.packets_to_send) #TODO
-            print(len(rudp_s.packets_to_send))
             rudp_s.send_data(address)
             print("file sent.")
 

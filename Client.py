@@ -156,6 +156,9 @@ TIMEOUT = 2
 
 
 def deconstruct_packet(packet):
+    print(type(packet[0]))
+    print(packet)
+    # print(packet[0].decode())
     seq, packet_type = struct.unpack(FORMAT, packet[0][:HEADER_SIZE])
     return {'type': packet_type, 'seq': seq, 'src_address': packet[1], 'data': packet[0][HEADER_SIZE:]}
 
@@ -212,7 +215,7 @@ class RUDPClient:
         packets_to_be_received = float('inf')
         while not self.all_data_received:
             try:
-                type, seq, address, data = deconstruct_packet(self.sock.recv(CHUNK)).values()
+                type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 if type == DATA_PACKET:
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received -= 1

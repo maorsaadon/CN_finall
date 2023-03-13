@@ -141,15 +141,17 @@ class RUDPServer:
         self.close_connection()
 
     def construct_payload(self, data):
-        packet_count_info = struct.pack(FORMAT, self.outgoing_seq, FILE_SIZE_INFO)
-        packet_count_info += str(len(self.packets_to_send)).encode()
-        self.packets_to_send[self.outgoing_seq] = packet_count_info
-        self.outgoing_seq += 1
+        first_seq = self.outgoing_seq
+        seq = first_seq + 1
         for i in range((self.file_size // CHUNK) + 1):
-            data_packet = struct.pack(FORMAT, self.outgoing_seq, DATA_PACKET)
+            data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
             data_packet += data[i * CHUNK:(i + 1) * CHUNK]
-            self.packets_to_send[self.outgoing_seq] = data_packet
-            self.outgoing_seq += 1
+            self.packets_to_send[seq] = data_packet
+            seq += 1
+
+        packet_count_info = struct.pack(FORMAT, first_seq, FILE_SIZE_INFO)
+        packet_count_info += bytes(len(self.packets_to_send))
+        self.packets_to_send[first_seq] = packet_count_info
 
     def close_connection(self):
 

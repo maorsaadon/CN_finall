@@ -255,13 +255,13 @@ def client_request(url, file_name):
     **************************************************************
     """
 
-    # # Create a DHCPClient object
-    # dhcp_client = DHCPClient()
-    #
-    # # Call the send_discover_packet() function to initiate the DHCP process
-    # dhcp_client.send_discover_packet()
-    #
-    # dns_ip = dhcp_client.DNSserver_ip
+    # Create a DHCPClient object
+    dhcp_client = DHCPClient()
+
+    # Call the send_discover_packet() function to initiate the DHCP process
+    dhcp_client.send_discover_packet()
+
+    dns_ip = dhcp_client.DNSserver_ip
 
     """
     *************************************************************
@@ -269,13 +269,12 @@ def client_request(url, file_name):
     **************************************************************
     """
 
-    # # Create a DNSClient object
-    # dns_client = DNSClient()
-    #
-    # # Query the DNS server for the IP address of downloadmanager.com
-    # app_server_ip = dns_client.query("downloadmanager.com")
+    # Create a DNSClient object
+    dns_client = DNSClient()
 
-    app_server_ip = '127.0.0.1'
+    # Query the DNS server for the IP address of downloadmanager.com
+    app_server_ip = dns_client.query("downloadmanager.com")
+
 
     """
     *************************************************************

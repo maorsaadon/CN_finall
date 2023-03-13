@@ -212,7 +212,7 @@ class RUDPClient:
         packets_to_be_received = float('inf')
         while not self.all_data_received:
             try:
-                type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
+                type, seq, address, data = deconstruct_packet(self.sock.recv(CHUNK)).values()
                 if type == DATA_PACKET:
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received -= 1
@@ -243,13 +243,13 @@ def client_request(url, file_name):
     **************************************************************
     """
 
-    # Create a DHCPClient object
-    dhcp_client = DHCPClient()
-
-    # Call the send_discover_packet() function to initiate the DHCP process
-    dhcp_client.send_discover_packet()
-
-    dns_ip = dhcp_client.DNSserver_ip
+    # # Create a DHCPClient object
+    # dhcp_client = DHCPClient()
+    #
+    # # Call the send_discover_packet() function to initiate the DHCP process
+    # dhcp_client.send_discover_packet()
+    #
+    # dns_ip = dhcp_client.DNSserver_ip
 
     """
     *************************************************************
@@ -257,11 +257,14 @@ def client_request(url, file_name):
     **************************************************************
     """
 
-    # Create a DNSClient object
-    dns_client = DNSClient()
+    # # Create a DNSClient object
+    # dns_client = DNSClient()
+    #
+    # # Query the DNS server for the IP address of downloadmanager.com
+    # app_server_ip = dns_client.query("downloadmanager.com")
 
-    # Query the DNS server for the IP address of downloadmanager.com
-    app_server_ip = dns_client.query("downloadmanager.com")
+    app_server_ip = '127.0.0.1'
+
 
 
     """

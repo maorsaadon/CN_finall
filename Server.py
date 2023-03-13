@@ -38,7 +38,7 @@ class RUDPServer:
         self.sock.settimeout(TIMEOUT)  # Set socket timeout to 1 second
         self.packets_to_send = {}  # Dictionary for holding packets to be sent
         self.sent_items = {}  # Dictionary for holding packets that have been sent but not yet acknowledged
-        self.outgoing_seq = random.randint(0, (2 ** 16))  # Sequence number for outgoing packets
+        self.first_seq = self.outgoing_seq = random.randint(0, (2 ** 16))  # Sequence number for outgoing packets
         self.cwnd = 1  # Initial congestion window size
         self.w_max = self.cwnd  # Maximum window size
         self.slow_start_threshold = 16  # Initial slow start threshold
@@ -72,6 +72,7 @@ class RUDPServer:
 
     def receive_packet(self):
         type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
+        print(data)
         return type, seq, address, data
 
     def cubic_algo(self, T):
@@ -110,8 +111,8 @@ class RUDPServer:
 
             # send payload
             packets = []
-            first_seq_sent = self.outgoing_seq
-            for i in range(self.cwnd):
+            first_seq_sent = self.first_seq
+            for i in range(first_seq_sent, max(first_seq_sent + self.cwnd, len(self.packets_to_send))):
                 packets.append(self.packets_to_send[i])
                 self.sent_items[i] = self.packets_to_send[i]
                 self.outgoing_seq += 1
@@ -185,6 +186,7 @@ def downloadmanager():
     rudp_s = RUDPServer(IP, PORT)
     rudp_s.bind()
     print("Ready to serve...")
+    rudp_s.accept_connection()
 
     time_to_wait = 60
     elapsed_time = 0
@@ -197,16 +199,19 @@ def downloadmanager():
 
             print("Request received")
             # string manipulation to extract host name anf file name
-            request_string = data.decode('utf-8')
+            request_string = data.decode()
             request_lines = request_string.split("\r\n")
             file_name = request_lines[0][5: -9]
             host = request_lines[1][6:]
-            url = f'http://{host}/{file_name}'
+            url = f"http://{host}/{file_name}"
 
             # http get request
             response = requests.get(url)
             data = response.content
+            print(data) #TODO
             rudp_s.construct_payload(data)
+            print(rudp_s.packets_to_send) #TODO
+            print(len(rudp_s.packets_to_send))
             rudp_s.send_data(address)
             print("file sent.")
 

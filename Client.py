@@ -178,6 +178,7 @@ class RUDPClient:
         self.request_accepted = False
 
     def connect(self, server_ip, server_port):
+        self.server_address = server_ip, server_port
         for i in range(ATTEMPT_LIMIT):
             # create a SYN packet
             syn_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_PACKET)
@@ -197,6 +198,7 @@ class RUDPClient:
                     return True
             except socket.timeout:
                 self.outgoing_seq += 1
+        self.server_address = None
         return False
 
     def send_request(self, request):
@@ -270,7 +272,7 @@ def client_request(url, file_name):
 
     http_request = f"GET /{file_name} HTTP/1.1\r\nHost: {url}\r\n\r\n".encode()
     rudp_c = RUDPClient()
-    rudp_c.connect(app_server_ip, 50000)
+    rudp_c.connect(app_server_ip, 30000)
     rudp_c.send_request(http_request)
     rudp_c.receive_data()
     if rudp_c.all_data_received:

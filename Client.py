@@ -7,10 +7,16 @@ from scapy.layers.inet import IP, UDP
 # Importing module for handling Ethernet frames
 from scapy.layers.l2 import Ether
 # imports the socket module which provides a low-level networking interface
+
 import random
 import struct
 import socket as s
 import time
+
+
+DOVI_LAST3_ID_DIG = 494
+MAOR_LAST3_ID_DIG = 421
+
 
 """
 *************************************************************
@@ -159,9 +165,7 @@ def deconstruct_packet(packet):
     seq, packet_type = struct.unpack(FORMAT, packet[0][:HEADER_SIZE])
     return {'type': packet_type, 'seq': seq, 'src_address': packet[1], 'data': packet[0][HEADER_SIZE:]}
 
-
 class RUDPClient:
-
     def __init__(self):
         """
         Constructor for the ReliableUDP class
@@ -194,7 +198,7 @@ class RUDPClient:
                 # verify that the packet is a SYN-ACK packet
                 if type == SYN_ACK_PACKET:
                     # send ACK packet to server
-                    print("Connection with server established...")
+                    print("Connection with server established...\n")
                     return True
             except socket.timeout:
                 self.outgoing_seq += 1
@@ -210,37 +214,39 @@ class RUDPClient:
 
     def receive_data(self):
         packets_to_be_received = float('inf')
-        # while not self.all_data_received:
-        flag = True
-        empty_receives = 10
-        while empty_receives > 0:
+        while not self.all_data_received:
             try:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 if type == DATA_PACKET:
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received -= 1
                     self.ack(seq)
-                # elif type == FILE_SIZE_INFO:
-                #     packets_to_be_received = int(data.decode()) - len(self.received_packets)
-                #     self.ack(seq)
+                    print(f"Downloaded pakcet - {seq} : {data}\n")
+                elif type == FILE_SIZE_INFO:
+                    packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
+                    self.ack(seq)
+                    print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
+                elif type == CLOSE_CONNECTION:
+                    close_connection_ack_packet = struct.pack(FORMAT, self.outgoing_seq, CLOSE_CONNECTION)
+                    self.outgoing_seq += 1
+                    self.ack(seq)
                 else: # type == REQUEST_ACK:
                     self.request_accepted = True
+                    print("Request received by server...\n")
             except socket.timeout:
-                # if packets_to_be_received == 0:
-                #     self.all_data_received = True
-                empty_receives -= 1
+                if packets_to_be_received == 0:
+                    self.all_data_received = True
                 continue
-        self.all_data_received = True
-        print(self.received_packets)
 
     def ack(self, seq):
         """
         Sends an acknowledgement packet for a specified sequence number to the src address
         :param seq: the sequence number of the packet to acknowledge
         """
-        ack = struct.pack(FORMAT, seq, ACK_PACKET)
+        ack = struct.pack(FORMAT, self.outgoing_seq, ACK_PACKET)
+        ack += f"ACK: {seq}".encode()
         self.sock.sendto(ack, self.received_packets[seq]['src address'])
-
+        self.outgoing_seq += 1
 
 def client_request(url, file_name):
     """
@@ -271,32 +277,37 @@ def client_request(url, file_name):
 
     app_server_ip = '127.0.0.1'
 
-
-
     """
     *************************************************************
                         HTTP request
     **************************************************************
     """
 
-    http_request = f"GET /{file_name} HTTP/1.1\r\nHost: {url}\r\n\r\n".encode()
     rudp_c = RUDPClient()
-    rudp_c.connect(app_server_ip, 30000)
+    rudp_c.connect(app_server_ip, 30000 + MAOR_LAST3_ID_DIG)
+
+    http_request = f"GET /{file_name} HTTP/1.1\r\nHost: {url}\r\n\r\n".encode()
     rudp_c.send_request(http_request)
+    print("Preparing to download file...\n")
+
     rudp_c.receive_data()
-    print("flag1")
+
     if rudp_c.all_data_received:
+        print("File downloaded. Preparing file.\n")
         data = b''
         packets = sorted(rudp_c.received_packets.items(), key=lambda item:item[0])
+
         for i in range(len(packets)):
             data += packets[i][1]['data']
-            print(data)
         output = data.decode('utf-8')
-        print("Flag")
+
+        print("Saving file...\n")
         with open(file_name, 'w') as f:
             f.write(output)
+        print("File successfuly saved!\n")
+        print("Closing Connection with server...\n")
     else:
-        print("something went wrong")
+        print("Something went wrong!")
 
 
 if __name__ == '__main__':

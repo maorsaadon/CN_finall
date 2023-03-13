@@ -210,22 +210,28 @@ class RUDPClient:
 
     def receive_data(self):
         packets_to_be_received = float('inf')
-        while not self.all_data_received:
+        # while not self.all_data_received:
+        flag = True
+        empty_receives = 10
+        while empty_receives > 0:
             try:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 if type == DATA_PACKET:
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received -= 1
                     self.ack(seq)
-                elif type == FILE_SIZE_INFO:
-                    packets_to_be_received = int(data.decode()) - len(self.received_packets)
-                    self.ack(seq)
+                # elif type == FILE_SIZE_INFO:
+                #     packets_to_be_received = int(data.decode()) - len(self.received_packets)
+                #     self.ack(seq)
                 else: # type == REQUEST_ACK:
                     self.request_accepted = True
             except socket.timeout:
-                if packets_to_be_received == 0:
-                    self.all_data_received = True
+                # if packets_to_be_received == 0:
+                #     self.all_data_received = True
+                empty_receives -= 1
                 continue
+        self.all_data_received = True
+        print(self.received_packets)
 
     def ack(self, seq):
         """
@@ -278,12 +284,15 @@ def client_request(url, file_name):
     rudp_c.connect(app_server_ip, 30000)
     rudp_c.send_request(http_request)
     rudp_c.receive_data()
+    print("flag1")
     if rudp_c.all_data_received:
         data = b''
         packets = sorted(rudp_c.received_packets.items(), key=lambda item:item[0])
         for i in range(len(packets)):
             data += packets[i][1]['data']
+            print(data)
         output = data.decode('utf-8')
+        print("Flag")
         with open(file_name, 'w') as f:
             f.write(output)
     else:

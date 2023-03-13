@@ -1,3 +1,4 @@
+import os
 import random
 import socket
 import struct
@@ -43,10 +44,11 @@ class RUDPServer:
         self.w_max = self.cwnd  # Maximum window size
         self.slow_start_threshold = 16  # Initial slow start threshold
         self.congestion_avoidance = False  # Flag for indicating whether we are currently in congestion avoidance phase
-        self.last_window_reduction = None  # Timestamp for the last time we reduced the congestion window
+        self.last_window_reduction = 0  # Timestamp for the last time we reduced the congestion window
         self.file_size = 0  # Size of the file to be sent
         self.rtt = 0  # Estimated round-trip time in seconds
         self.server_address = ip, port
+        self.target_address = None
         self.connected = False
         self.requests = {}
 
@@ -66,12 +68,12 @@ class RUDPServer:
                     syn_ack_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_ACK_PACKET)
                     self.sock.sendto(syn_ack_packet, address)
                     self.connected = True
+                    self.target_address = address
             except socket.timeout:
                 continue
 
     def receive_packet(self):
         type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
-        print(data)
         return type, seq, address, data
 
     def cubic_algo(self, T):
@@ -111,13 +113,11 @@ class RUDPServer:
 
             # send payload
             packets = []
-            first_seq_sent = seq = self.outgoing_seq
-            for i in range(max(self.cwnd, len(self.packets_to_send))):
-                print(self.packets_to_send)
-                print(i)
-                packets.append(self.packets_to_send[seq])
+            first_seq_sent = self.outgoing_seq
+            for seq, data in self.packets_to_send.items():
+                packets.append(data)
                 self.sent_items[seq] = self.packets_to_send[seq]
-                seq += 1
+                self.outgoing_seq += 1
 
             # Send all the packets at once using the socket
             time_of_sending = time.time()
@@ -136,6 +136,7 @@ class RUDPServer:
                             self.rtt = time_of_sending - time_of_ack
                             self.sock.settimeout(2)
                         self.sent_items.pop(seq)
+                        self.packets_to_send.pop(seq)
             except socket.timeout:
                 if len(self.packets_to_send) == len(self.sent_items) == 0:  # all packets were sent and acked
                     break
@@ -148,7 +149,6 @@ class RUDPServer:
         # seq = first_seq #+ 1
         seq = self.outgoing_seq
         for i in range((self.file_size // CHUNK) + 1):
-            print(seq)
             data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
             data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
             self.packets_to_send[seq] = data_packet
@@ -164,23 +164,24 @@ class RUDPServer:
         # sends a CLOSE_CONNECTION packet to the other end and waits for a CLOSE_CONNECTION_ACK packet before closing
         # the socket.
 
-        while True:
-            # construct the CLOSE_CONNECTION packet and send it
-            packet = struct.pack(FORMAT, self.outgoing_seq, CLOSE_CONNECTION)
-            packet += b'Closing connection'
-            self.sock.send(packet)
-            try:
-                # wait for a response packet from the other end
-                type, seq, _, _ = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
-
-                if type == CLOSE_CONNECTION_ACK:
-                    # if a CLOSE_CONNECTION_ACK packet is received, close the socket and exit the loop
-                    self.sock.close()
-                    print("Connection closed.")
-                    break
-            except socket.timeout:
-                # if an error occurs while waiting for the response packet, continue waiting
-                continue
+        # while True:
+        #     # construct the CLOSE_CONNECTION packet and send it
+        #     packet = struct.pack(FORMAT, self.outgoing_seq, CLOSE_CONNECTION)
+        #     packet += b'Closing connection'
+        #     self.sock.sendto(packet, self.target_address)
+        self.sock.close()
+            # try:
+            #     # wait for a response packet from the other end
+            #     type, seq, _, _ = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
+            #
+            #     if type == CLOSE_CONNECTION_ACK:
+            #         # if a CLOSE_CONNECTION_ACK packet is received, close the socket and exit the loop
+            #         self.sock.close()
+            #         print("Connection closed.")
+            #         break
+            # except socket.timeout:
+            #     # if an error occurs while waiting for the response packet, continue waiting
+            #     continue
 
 
 # app server
@@ -218,6 +219,7 @@ def downloadmanager():
             rudp_s.file_size = len(data)
             rudp_s.construct_payload(data)
             rudp_s.send_data(address)
+            print("FLAG")
             print("file sent.")
 
         except socket.timeout:

@@ -1,77 +1,82 @@
 import socket
 
-class DNSserver:
+class DNSserver: 
     def __init__(self):
-        # Set the IP address and port number for the DNS server
-        self.ip_address = '127.0.0.1'
-        self.port_number = 50000
-    
-    def DnsHandler(self):
-        # Create a socket object
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addresses = {}
+        self.ip_domain = None
 
-        # Set socket option to reuse the address
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    def recieve_dns_query(self):
+        # create a UDP socket
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        # Bind the socket to the IP address and port number
-        server_socket.bind((self.ip_address, self.port_number))
-        
-        # Listen for incoming connections
-        server_socket.listen()
+        # bind the socket to a local address and port
+        server_socket.bind(('127.0.0.1' , 53))
 
-        # Handling one client loop
         while True:
-            # Accept incoming connections
-            client_socket, client_address = server_socket.accept()
-            
-            # Receive the encoded query from the client
-            encoded_query = client_socket.recv(1024)
-            
-            # Decode the query to get the domain name
-            domain_name = encoded_query.decode()
-            
-            # Initialize the result to an empty string
-            result = ""
-            
-            # Print the query domain name being checked
-            print("Checking for the the domain name what is the IP:  " +(domain_name)+ "IP address")
-            
-            # Check if the query is for 'downloadmanager.com'
-            if domain_name == "downloadmanager.com":
-                # Set the result to '127.0.0.1' if query is 'downloadmanager.com'
-                result = "127.0.0.1".encode()
-            else:
-                result = self.BuildResponse(domain_name)      
-            
-            # Send the result to the client
-            client_socket.sendall(result)
+            # receive a DNS query packet
+            query_packet, client_address = server_socket.recvfrom(4096)
+
+            # construct the DNS response packet
+            response_packet = self.handle_query_response(query_packet)
+
+            # send the response packet to the client
+            server_socket.sendto(response_packet, client_address)
+
+
+    def handle_query_response(self, query_packet):
+        """
+        Given a DNS query packet, construct a DNS response packet and return it.
+        """
+        # extract the domain name from the query packet
+        domain = self.extract_domain(query_packet)
+
+        # resolve the IP address for the domain name
+        if domain in self.addresses:
+            self.domain_ip = self.addresses[domain]
+            print(f"Resolved {domain} to {self.domain_ip}, using our Database module. ")
+        else:
+            self.ip_domain = socket.gethostbyname(domain)
+            print(f"Resolved {domain} -> {self.ip_domain}, using the socket module.")
            
-            # Print that the result has been sent
-            print("Result has been sent")
-    
-            # Close the client socket
-            client_socket.close()
+        # construct the DNS response packet
+        packet = b''
+        packet += query_packet[:2]  # copy the ID from the query packet
+        packet += b'\x81\x80'  # QR=1, Opcode=0, AA=1, TC=0, RD=1, RA=1, Z=0, RCODE=0
+        packet += query_packet[4:6]  # copy the QDCOUNT from the query packet
+        packet += b'\x00\x01'  # ANCOUNT=1
+        packet += b'\x00\x00'  # NSCOUNT=0
+        packet += b'\x00\x00'  # ARCOUNT=0
+        # construct the question section
+        packet += query_packet[12:]
+        # construct the answer section
+        packet += b'\xc0\x0c'  # pointer to the domain name in the question section
+        packet += b'\x00\x01'  # TYPE=A
+        packet += b'\x00\x01'  # CLASS=IN
+        packet += b'\x00\x00\x01\x2c'  # TTL=300 seconds
+        packet += b'\x00\x04'  # RDLENGTH=4 bytes
+        packet += socket.inet_aton(self.ip_domain)
 
-    def BuildResponse(self, domain_name):
-        try:
-            # Get the address information for the query domain name
-            address_info = socket.getaddrinfo(domain_name, None)
-            
-            # Extract the IP address from the address information
-            encoded_result = address_info[0][4][0]
-            
-            # Encode the IP address to send to the client
-            result = encoded_result.encode()
-        except Exception as e:
-            # If there is an error, set the result to the error message
-            result = str(e).encode()
-        return result
+        return packet
 
-# Create a DNS server object and start the server
+
+    def extract_domain(self,query_packet):
+        """
+        Given a DNS query packet, extract the domain name from the question section
+        and return it.
+        """
+        domain = ''
+        pos = 12
+        while query_packet[pos] != 0:
+            length = query_packet[pos]
+            domain += query_packet[pos+1:pos+1+length].decode('ascii') + '.'
+            pos += 1 + length
+        domain = domain[:-1]  # remove the trailing dot
+        return domain
+
+
 if __name__ == '__main__':
-    
-    # Create a DNS server object
-    handler = DNSserver()
-    
-    # Start the DNS server
-    handler.DnsHandler()
+    # create a DNS server instance
+    dns_server = DNSserver()
+
+    # listen for incoming DNS queries and handle them
+    dns_server.recieve_dns_query()

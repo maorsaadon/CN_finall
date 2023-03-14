@@ -147,8 +147,8 @@ class RUDPServer:
                             if acked_seq == first_seq_sent:
                                 self.rtt = time_of_sending - time_of_ack
                                 self.sock.settimeout(2)
-                        self.sent_items.pop(acked_seq)
-                        self.packets_to_send.pop(acked_seq)
+                            self.sent_items.pop(acked_seq)
+                            self.packets_to_send.pop(acked_seq)
             except socket.timeout:
                 pass
 

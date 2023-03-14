@@ -137,7 +137,7 @@ class RUDPServer:
 
             # receive acks
             try:
-                while True:
+                while len(self.packets_to_send) > 0:
                     type, _, _, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                     time_of_ack = time.time()
 

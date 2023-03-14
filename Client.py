@@ -180,11 +180,15 @@ class RUDPClient:
         self.request_sent = False
         self.connected = False
 
+    def increment_seq(self):
+        self.outgoing_seq += 1
+
     def connect(self, server_ip, server_port):
         self.server_address = server_ip, server_port
         for i in range(10): # attempt 10 times
             # create a SYN packet
             syn_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_PACKET)
+            self.increment_seq()
             # send the SYN packet to the server
             self.sock.sendto(syn_packet, (server_ip, server_port))
 
@@ -198,19 +202,21 @@ class RUDPClient:
                 if type == SYN_ACK_PACKET:
                     acked_seq = data.decode()[5:]
                     if seq == acked_seq:
+                        self.connected = True
                         print("Connection with server established...\n")
-                    self.connected = True
+                        return
             except socket.timeout:
-                pass
-            self.server_address = None
-        return False
+                continue
+        print("Connection with server failed!")
+        self.server_address = None
+        self.sock.close()
 
     def send_request(self, request):
         attempts = 10
         while attempts > 0 and not self.request_sent:
             try:
                 http_request_packet = struct.pack(FORMAT, self.outgoing_seq, REQUEST_PACKET)
-                self.outgoing_seq += 1
+                self.increment_seq()
                 http_request_packet += request
                 self.sock.sendto(http_request_packet, self.server_address)
                 self.request_sent = True
@@ -227,26 +233,30 @@ class RUDPClient:
         while not self.all_data_received:
             try:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
-                if type == DATA_PACKET:
-                    self.received_packets[seq] = {'src address': address, 'data': data}
-                    packets_to_be_received -= 1
+
+                if packets_to_be_received == 0 and type == CLOSE_CONNECTION:
+                    self.received_packets[seq] = {'src address': address, 'data': b'CLOSE CONNECTION'}
                     self.ack(seq)
-                    print(f"Downloaded pakcet - {seq} : {data}\n")
+                    self.all_data_received = True
+                    break
+
                 elif type == FILE_SIZE_INFO:
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
                     self.ack(seq)
-                    print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
-                elif packets_to_be_received == 0 and type == CLOSE_CONNECTION:
-                    self.received_packets[seq] = {'src address': address, 'data': b'CLOSE CONNECTION'}
-                    self.outgoing_seq += 1
-                    self.ack(seq)
-                    self.all_data_received = True
-                    break
-                else:  # type == REQUEST_ACK:
+                    print(f"Received file size info. Number of packets left to be downloaded: {packets_to_be_received}\n")
+
+                elif type == REQUEST_ACK:
                     self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
                     self.request_sent = True
                     print("Request received by server...\n")
+
+                elif type == DATA_PACKET:
+                    self.received_packets[seq] = {'src address': address, 'data': data}
+                    packets_to_be_received -= 1
+                    self.ack(seq)
+                    print(f"Downloaded pakcet - {seq} : {data}\n")
+
             except socket.timeout:
                 if packets_to_be_received == 0:
                     self.all_data_received = True
@@ -271,27 +281,29 @@ def client_request(url, file_name):
                            DHCP request
     **************************************************************
     """
+    #
+    # # Create a DHCPClient object
+    # dhcp_client = DHCPClient()
+    #
+    # # Call the send_discover_packet() function to initiate the DHCP process
+    # dhcp_client.send_discover_packet()
+    #
+    # dns_ip = dhcp_client.DNSserver_ip
+    #
+    # """
+    # *************************************************************
+    #                 DNS query
+    # **************************************************************
+    # """
+    #
+    # # Create a DNSClient object
+    # dns_client = DNSClient()
+    #
+    # # Query the DNS server for the IP address of downloadmanager.com
+    # app_server_ip = dns_client.query("downloadmanager.com")
+    # print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
 
-    # Create a DHCPClient object
-    dhcp_client = DHCPClient()
-
-    # Call the send_discover_packet() function to initiate the DHCP process
-    dhcp_client.send_discover_packet()
-
-    dns_ip = dhcp_client.DNSserver_ip
-
-    """
-    *************************************************************
-                    DNS query
-    **************************************************************
-    """
-
-    # Create a DNSClient object
-    dns_client = DNSClient()
-
-    # Query the DNS server for the IP address of downloadmanager.com
-    app_server_ip = dns_client.query("downloadmanager.com")
-    print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
+    app_server_ip = '127.0.0.1'
 
     """
     *************************************************************
@@ -331,45 +343,46 @@ def client_request(url, file_name):
         print("Something went wrong!")
 
 
-class HTMLFormServer:
-    def __init__(self):
-        self.app = Flask(__name__)
-
-        @self.app.route('/', methods=['GET', 'POST'])
-        def handle_form():
-            if request.method == 'POST':
-                host_name = request.form['hostName']
-                file_name = request.form['fileName']
-                client_request(host_name, file_name)
-                # Do something with the form data (e.g. print it to the console)
-                print("Host Name:", host_name)
-                print("File Name:", file_name)
-                return "Form submitted successfully"
-            else:
-                # Serve the HTML file
-                return '''
-                    <!DOCTYPE html>
-                    <html>
-                      <head>
-                        <meta charset="UTF-8">
-                        <title>Web App</title>
-                      </head>
-                      <body>
-                        <form id="myForm" method="post">
-                          <label for="hostName">Host Name:</label>
-                          <input type="text" id="hostName" name="hostName"><br><br>
-                          <label for="fileName">File Name:</label>
-                          <input type="text" id="fileName" name="fileName"><br><br>
-                          <input type="submit" value="Submit Request">
-                        </form>
-                      </body>
-                    </html>
-                '''
-
-    def run(self, host='localhost', port=5000):
-        self.app.run(host=host, port=port)
-
+# class HTMLFormServer:
+#     def __init__(self):
+#         self.app = Flask(__name__)
+#
+#         @self.app.route('/', methods=['GET', 'POST'])
+#         def handle_form():
+#             if request.method == 'POST':
+#                 host_name = request.form['hostName']
+#                 file_name = request.form['fileName']
+#                 client_request(host_name, file_name)
+    #             # Do something with the form data (e.g. print it to the console)
+    #             print("Host Name:", host_name)
+    #             print("File Name:", file_name)
+    #             return "Form submitted successfully"
+    #         else:
+    #             # Serve the HTML file
+    #             return '''
+    #                 <!DOCTYPE html>
+    #                 <html>
+    #                   <head>
+    #                     <meta charset="UTF-8">
+    #                     <title>Web App</title>
+    #                   </head>
+    #                   <body>
+    #                     <form id="myForm" method="post">
+    #                       <label for="hostName">Host Name:</label>
+    #                       <input type="text" id="hostName" name="hostName"><br><br>
+    #                       <label for="fileName">File Name:</label>
+    #                       <input type="text" id="fileName" name="fileName"><br><br>
+    #                       <input type="submit" value="Submit Request">
+    #                     </form>
+    #                   </body>
+    #                 </html>
+    #             '''
+    #
+    # def run(self, host='localhost', port=5000):
+    #     self.app.run(host=host, port=port)
 
 if __name__ == '__main__':
-    server = HTMLFormServer()
-    server.run()
+    # server = HTMLFormServer()
+    # server.run()
+    client_request("www.google,com", "index.html")
+

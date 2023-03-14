@@ -244,6 +244,7 @@ def downloadmanager():
             print("Extracting URL...")
             request_string = data.decode()
             request_lines = request_string.split("\r\n")
+            print(request_lines)
             file_name = request_lines[0][5: -9]
             host = request_lines[1][6:]
 

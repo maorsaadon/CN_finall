@@ -6,8 +6,7 @@ import socket as s
 import time
 import requests
 
-DOVI_LAST3_ID_DIG = 494
-MAOR_LAST3_ID_DIG = 421
+
 
 # Define constants
 DOVI_LAST3_ID_DIG = 494
@@ -161,7 +160,7 @@ class RUDPServer:
         self.outgoing_seq += 1
         # send the FYN packet to the server
         self.sock.sendto(close_packet, address)
-        return True
+        return
 
     def construct_payload(self, data):
         seq = self.outgoing_seq
@@ -235,6 +234,7 @@ def downloadmanager():
     current_time = time.time()
     time_stamp = current_time
     request = ''
+
     while time_to_wait > 0:
         try:
             t, seq, address, data = rudp_s.receive_packet()
@@ -265,8 +265,8 @@ def downloadmanager():
             if packet_type == CLOSE_CONNECTION:
                 print('close the socket...')
                 rudp_s.close_connection()
-                exit(1)
             print("Download completed successfully!")
+            return
 
 
         except socket.timeout:

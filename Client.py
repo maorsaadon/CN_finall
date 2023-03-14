@@ -289,6 +289,7 @@ def client_request(url, file_name):
     #
     # # Query the DNS server for the IP address of downloadmanager.com
     # app_server_ip = dns_client.query("downloadmanager.com")
+    # print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
 
     app_server_ip = '127.0.0.1'
 

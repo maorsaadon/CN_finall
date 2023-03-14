@@ -7,7 +7,6 @@ from scapy.layers.inet import IP, UDP
 # Importing module for handling Ethernet frames
 from scapy.layers.l2 import Ether
 # imports the socket module which provides a low-level networking interface
-
 from flask import Flask, request
 
 import random
@@ -146,9 +145,11 @@ class DNSClient:
 # Constants
 CHUNK = 2048  # Maximum data size in packet
 HEADER_SIZE = 8  # Size of packet header
+ATTEMPT_LIMIT = 10
 DATA_PACKET = 0  # Packet type for data packets
 ACK_PACKET = 1  # Packet type for acknowledgement packets
 SYN_PACKET = 2  # Packet type for syn packet
+FYN_PACKET = 6
 SYN_ACK_PACKET = 3  # Packet type for syn ack packet
 FILE_SIZE_INFO = 4  # a special packet type for indicating the file size to be sent.
 CLOSE_CONNECTION = 5  # Packet type for closing connection
@@ -178,21 +179,18 @@ class RUDPClient:
         self.server_address = None  # tuple: (ip, port)
         self.all_data_received = False
         self.request_sent = False
-        self.connected = False
-
-    def increment_seq(self):
-        self.outgoing_seq += 1
+        self.request_accepted = False
 
     def connect(self, server_ip, server_port):
         self.server_address = server_ip, server_port
-        for i in range(10): # attempt 10 times
+        for i in range(ATTEMPT_LIMIT):
             # create a SYN packet
             syn_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_PACKET)
-            self.increment_seq()
             # send the SYN packet to the server
             self.sock.sendto(syn_packet, (server_ip, server_port))
+            self.outgoing_seq += 1
 
-            time.sleep(2)  # 2 seconds grace period for flow control
+            time.sleep(2)  # 2 seconds grace period
 
             # receive syn ack
             try:
@@ -200,25 +198,22 @@ class RUDPClient:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 # verify that the packet is a SYN-ACK packet
                 if type == SYN_ACK_PACKET:
-                    acked_seq = data.decode()[5:]
-                    if seq == acked_seq:
-                        self.connected = True
-                        print("Connection with server established...\n")
-                        return
+                    # send ACK packet to server
+                    print("Connection with server established...\n")
+                    return True
             except socket.timeout:
-                continue
-        print("Connection with server failed!")
+                print("Somthing went wrong.....\n")
         self.server_address = None
-        self.sock.close()
+        return False
 
     def send_request(self, request):
         attempts = 10
         while attempts > 0 and not self.request_sent:
             try:
                 http_request_packet = struct.pack(FORMAT, self.outgoing_seq, REQUEST_PACKET)
-                self.increment_seq()
                 http_request_packet += request
                 self.sock.sendto(http_request_packet, self.server_address)
+                self.outgoing_seq += 1
                 self.request_sent = True
                 self.receive_data()
             except TypeError:
@@ -233,36 +228,39 @@ class RUDPClient:
         while not self.all_data_received:
             try:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
-
-                if packets_to_be_received == 0 and type == CLOSE_CONNECTION:
-                    self.received_packets[seq] = {'src address': address, 'data': b'CLOSE CONNECTION'}
-                    self.ack(seq)
-                    self.all_data_received = True
-                    break
-
-                elif type == FILE_SIZE_INFO:
+                if type == FILE_SIZE_INFO:
+                    print('filesize')
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
                     self.ack(seq)
-                    print(f"Received file size info. Number of packets left to be downloaded: {packets_to_be_received}\n")
-
-                elif type == REQUEST_ACK:
-                    self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
-                    self.request_sent = True
-                    print("Request received by server...\n")
-
-                elif type == DATA_PACKET:
+                    print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
+                if type == DATA_PACKET:
+                    print('Data packet')
                     self.received_packets[seq] = {'src address': address, 'data': data}
-                    packets_to_be_received -= 1
                     self.ack(seq)
+                    packets_to_be_received -= 1
                     print(f"Downloaded pakcet - {seq} : {data}\n")
-
+                if type == ACK_PACKET:
+                    print('Ack packet')
+                    self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
+                if packets_to_be_received == 0 and type == CLOSE_CONNECTION:
+                    print('close connection packet')
+                    self.received_packets[seq] = {'src address': address, 'data': b'CLOSE CONNECTION'}
+                    close_packet = struct.pack(FORMAT, self.outgoing_seq, CLOSE_CONNECTION)
+                    self.outgoing_seq += 1
+                    # send the SYN packet to the server
+                    self.sock.sendto(close_packet, address)
+                    self.all_data_received = True
+                    self.sock.close()
+                    print('close the socket...')
+                    break
             except socket.timeout:
                 if packets_to_be_received == 0:
-                    self.all_data_received = True
-                    break
-                continue
-        self.sock.close()
+                    fyn_packet = struct.pack(FORMAT, self.outgoing_seq, FYN_PACKET)
+                    # send the SYN packet to the server
+                    self.sock.sendto(fyn_packet, address)
+
+
 
     def ack(self, seq):
         """
@@ -272,7 +270,10 @@ class RUDPClient:
         ack = struct.pack(FORMAT, self.outgoing_seq, ACK_PACKET)
         ack += f"ACK: {seq}".encode()
         self.sock.sendto(ack, self.received_packets[seq]['src address'])
+        print('sent ACK_PACKET', seq)
         self.outgoing_seq += 1
+        print('sent ACK_PACKET', seq)
+
 
 
 def client_request(url, file_name):
@@ -281,29 +282,27 @@ def client_request(url, file_name):
                            DHCP request
     **************************************************************
     """
-    #
-    # # Create a DHCPClient object
-    # dhcp_client = DHCPClient()
-    #
-    # # Call the send_discover_packet() function to initiate the DHCP process
-    # dhcp_client.send_discover_packet()
-    #
-    # dns_ip = dhcp_client.DNSserver_ip
-    #
-    # """
-    # *************************************************************
-    #                 DNS query
-    # **************************************************************
-    # """
-    #
-    # # Create a DNSClient object
-    # dns_client = DNSClient()
-    #
-    # # Query the DNS server for the IP address of downloadmanager.com
-    # app_server_ip = dns_client.query("downloadmanager.com")
-    # print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
 
-    app_server_ip = '127.0.0.1'
+    # Create a DHCPClient object
+    dhcp_client = DHCPClient()
+
+    # Call the send_discover_packet() function to initiate the DHCP process
+    dhcp_client.send_discover_packet()
+
+    dns_ip = dhcp_client.DNSserver_ip
+
+    """
+    *************************************************************
+                    DNS query
+    **************************************************************
+    """
+
+    # Create a DNSClient object
+    dns_client = DNSClient()
+
+    # Query the DNS server for the IP address of downloadmanager.com
+    app_server_ip = dns_client.query("downloadmanager.com")
+    print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
 
     """
     *************************************************************
@@ -338,51 +337,51 @@ def client_request(url, file_name):
         with open(file_name, 'w') as f:
             f.write(output)
         print("File successfuly saved!\n")
-        print("Closing Connection with server...\n")
+        exit(1)
     else:
         print("Something went wrong!")
 
 
-# class HTMLFormServer:
-#     def __init__(self):
-#         self.app = Flask(__name__)
-#
-#         @self.app.route('/', methods=['GET', 'POST'])
-#         def handle_form():
-#             if request.method == 'POST':
-#                 host_name = request.form['hostName']
-#                 file_name = request.form['fileName']
-#                 client_request(host_name, file_name)
-    #             # Do something with the form data (e.g. print it to the console)
-    #             print("Host Name:", host_name)
-    #             print("File Name:", file_name)
-    #             return "Form submitted successfully"
-    #         else:
-    #             # Serve the HTML file
-    #             return '''
-    #                 <!DOCTYPE html>
-    #                 <html>
-    #                   <head>
-    #                     <meta charset="UTF-8">
-    #                     <title>Web App</title>
-    #                   </head>
-    #                   <body>
-    #                     <form id="myForm" method="post">
-    #                       <label for="hostName">Host Name:</label>
-    #                       <input type="text" id="hostName" name="hostName"><br><br>
-    #                       <label for="fileName">File Name:</label>
-    #                       <input type="text" id="fileName" name="fileName"><br><br>
-    #                       <input type="submit" value="Submit Request">
-    #                     </form>
-    #                   </body>
-    #                 </html>
-    #             '''
-    #
-    # def run(self, host='localhost', port=5000):
-    #     self.app.run(host=host, port=port)
+class HTMLFormServer:
+
+    def __init__(self):
+        self.app = Flask(__name__)
+
+        @self.app.route('/', methods=['GET', 'POST'])
+        def handle_form():
+            if request.method == 'POST':
+                host_name = request.form['hostName']
+                file_name = request.form['fileName']
+                client_request(host_name, file_name)
+                # Do something with the form data (e.g. print it to the console)
+                print("Host Name:", host_name)
+                print("File Name:", file_name)
+                return "Form submitted successfully"
+            else:
+                # Serve the HTML file
+                return '''
+                    <!DOCTYPE html>
+                    <html>
+                      <head>
+                        <meta charset="UTF-8">
+                        <title>Web App</title>
+                      </head>
+                      <body>
+                        <form id="myForm" method="post">
+                          <label for="hostName">Host Name:</label>
+                          <input type="text" id="hostName" name="hostName"><br><br>
+                          <label for="fileName">File Name:</label>
+                          <input type="text" id="fileName" name="fileName"><br><br>
+                          <input type="submit" value="Submit Request">
+                        </form>
+                      </body>
+                    </html>
+                '''
+
+    def run(self, host='localhost', port=5000):
+        self.app.run(host=host, port=port)
+
 
 if __name__ == '__main__':
-    # server = HTMLFormServer()
-    # server.run()
-    client_request("www.google.com", "index.html")
-
+    server = HTMLFormServer()
+    server.run()

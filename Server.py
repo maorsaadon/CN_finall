@@ -19,6 +19,7 @@ DATA_PACKET = 0  # Packet type for data packets
 ACK_PACKET = 1  # Packet type for acknowledgement packets
 SYN_PACKET = 2  # Packet type for syn packet
 SYN_ACK_PACKET = 3  # Packet type for syn ack packet
+FYN_PACKET = 6
 FILE_SIZE_INFO = 4  # A special packet type for indicating the file size to be sent
 CLOSE_CONNECTION = 5  # Packet type for closing connection
 REQUEST_PACKET = 7
@@ -38,6 +39,7 @@ def deconstruct_packet(packet):
     :param packet: The packet to deconstruct
     :return: A dictionary with the packet's type, sequence number, source address, and data
     """
+
     seq, packet_type = struct.unpack(FORMAT, packet[0][:HEADER_SIZE])
     return {'type': packet_type, 'seq': seq, 'src_address': packet[1], 'data': packet[0][HEADER_SIZE:]}
 
@@ -74,22 +76,17 @@ class RUDPServer:
         self.sock.bind(self.server_address)
 
     def accept_connection(self):
-        attempts = 10
-        while not self.connected and attempts > 0:
+        while not self.connected:
             try:
                 type, seq, address, _ = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 if type == SYN_PACKET:
                     syn_ack_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_ACK_PACKET)
-                    self.outgoing_seq += 1
-                    syn_ack_packet += f"ACK: {seq}".encode()
                     self.sock.sendto(syn_ack_packet, address)
+                    self.outgoing_seq += 1
                     self.connected = True
                     self.target_address = address
             except socket.timeout:
                 continue
-        if attempts == 0:
-            print("Something went wrong! could not establish connection with client...")
-            self.close_connection(force=True)
 
     def receive_packet(self):
         type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
@@ -106,7 +103,7 @@ class RUDPServer:
         return cwnd
 
     def send_data(self, address):
-        while len(self.packets_to_send) > 0:
+        while self.packets_to_send:
             # slow start
             if not self.congestion_avoidance:
                 if self.cwnd >= self.slow_start_threshold:
@@ -134,46 +131,50 @@ class RUDPServer:
                 self.send_packet_count()
 
             packets = []
-            first_seq_sent = min(self.packets_to_send)
+            first_seq_sent = self.outgoing_seq
             for seq, data in self.packets_to_send.items():
                 packets.append(data)
-                self.sent_items[seq] = data
+                self.sent_items[seq] = self.packets_to_send[seq]
             # Send all the packets at once using the socket
             time_of_sending = time.time()
             self.sock.sendto(b''.join(packets), address)
-
             # receive acks
             try:
-                while len(self.packets_to_send) > 0:
-                    type, _, _, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
+                while self.packets_to_send:
+                    packet_type, _, _, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
+                    if packet_type == FYN_PACKET:
+                        if self.packets_to_send:
+                            self.packets_to_send = {}
+                        break
                     time_of_ack = time.time()
-
-                    if type == ACK_PACKET:
+                    if packet_type == ACK_PACKET:
                         acked_seq = int(data.decode()[5:])
                         if acked_seq in self.sent_items:  # if this is an acknowledgement packet for a
                             if acked_seq == first_seq_sent:
                                 self.rtt = time_of_sending - time_of_ack
-                                self.sock.settimeout(2)
+                                self.sock.settimeout(self.rtt / 2)
                             self.sent_items.pop(acked_seq)
                             self.packets_to_send.pop(acked_seq)
             except socket.timeout:
-                pass
-
-        # loop breaks if and only if all packets were sent and acked, and only then connection is closed:
-        self.close_connection()
-        return
+                continue
+        close_packet = struct.pack(FORMAT, self.outgoing_seq, CLOSE_CONNECTION)
+        self.outgoing_seq += 1
+        # send the FYN packet to the server
+        self.sock.sendto(close_packet, address)
+        return True
 
     def construct_payload(self, data):
         seq = self.outgoing_seq
-        for i in range(self.file_size + CHUNK // CHUNK):
+        for i in range((self.file_size // CHUNK) + 1):
             data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
-            data_packet += data[(i * CHUNK):min(len(data), (i + 1) * CHUNK)]
+            data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
             self.packets_to_send[seq] = data_packet
             seq += 1
         self.outgoing_seq = seq
 
     def send_packet_count(self):
-        seq_to_send = min(0, min(self.packets_to_send) - 1)
+        seq_to_send = self.outgoing_seq
+        self.outgoing_seq += 1
         packet_count = len(self.packets_to_send)
         file_size_info_packet = struct.pack(FORMAT, seq_to_send, FILE_SIZE_INFO)
         file_size_info_packet += f"Number of Packets: {packet_count}".encode()
@@ -215,7 +216,6 @@ class RUDPServer:
                 except socket.timeout:
                     attempts -= 1
         self.sock.close()
-        return
 
 
 # app server
@@ -244,7 +244,6 @@ def downloadmanager():
             print("Extracting URL...")
             request_string = data.decode()
             request_lines = request_string.split("\r\n")
-            print(request_lines)
             file_name = request_lines[0][5: -9]
             host = request_lines[1][6:]
 
@@ -261,7 +260,14 @@ def downloadmanager():
             print("Downloading file...")
             rudp_s.construct_payload(data)
             rudp_s.send_data(address)
+
+            packet_type, seq, _, data = deconstruct_packet(rudp_s.sock.recvfrom(CHUNK)).values()
+            if packet_type == CLOSE_CONNECTION:
+                print('close the socket...')
+                rudp_s.close_connection()
+                exit(1)
             print("Download completed successfully!")
+
 
         except socket.timeout:
             pass
@@ -271,6 +277,7 @@ def downloadmanager():
         time_to_wait -= elapsed_time
     print("No requests submitted for more than a minute! closing connection!")
     rudp_s.close_connection(force=True)
+    exit(1)
     return
 
 

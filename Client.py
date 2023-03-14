@@ -335,4 +335,9 @@ def client_request(url, file_name):
 
 
 if __name__ == '__main__':
+    import threading
+    import Server
+    t = threading.Thread(target=Server)
+    t.start()
+
     client_request("www.google.com", "index.html")

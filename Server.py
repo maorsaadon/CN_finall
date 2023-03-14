@@ -209,6 +209,7 @@ class RUDPServer:
                 except socket.timeout:
                     attempts -= 1
         self.sock.close()
+        return
 
 
 # app server
@@ -267,4 +268,5 @@ def downloadmanager():
 
 
 if __name__ == '__main__':
+
     downloadmanager()

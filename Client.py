@@ -146,7 +146,6 @@ class DNSClient:
 # Constants
 CHUNK = 2048  # Maximum data size in packet
 HEADER_SIZE = 8  # Size of packet header
-ATTEMPT_LIMIT = 10
 DATA_PACKET = 0  # Packet type for data packets
 ACK_PACKET = 1  # Packet type for acknowledgement packets
 SYN_PACKET = 2  # Packet type for syn packet
@@ -182,13 +181,13 @@ class RUDPClient:
 
     def connect(self, server_ip, server_port):
         self.server_address = server_ip, server_port
-        for i in range(ATTEMPT_LIMIT):
+        for i in range(10): # attempt 10 times
             # create a SYN packet
             syn_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_PACKET)
             # send the SYN packet to the server
             self.sock.sendto(syn_packet, (server_ip, server_port))
 
-            time.sleep(2)  # 2 seconds grace period
+            time.sleep(2)  # 2 seconds grace period for flow control
 
             # receive syn ack
             try:
@@ -196,12 +195,13 @@ class RUDPClient:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 # verify that the packet is a SYN-ACK packet
                 if type == SYN_ACK_PACKET:
-                    # send ACK packet to server
-                    print("Connection with server established...\n")
+                    acked_seq = data.decode()[5:]
+                    if seq == acked_seq:
+                        print("Connection with server established...\n")
                     return True
             except socket.timeout:
-                self.outgoing_seq += 1
-        self.server_address = None
+                pass
+            self.server_address = None
         return False
 
     def send_request(self, request):
@@ -242,7 +242,6 @@ class RUDPClient:
                     self.ack(seq)
                     self.all_data_received = True
                     break
-
                 else:  # type == REQUEST_ACK:
                     self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
                     self.request_sent = True

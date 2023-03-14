@@ -74,16 +74,22 @@ class RUDPServer:
         self.sock.bind(self.server_address)
 
     def accept_connection(self):
-        while not self.connected:
+        attempts = 10
+        while not self.connected and attempts > 0:
             try:
                 type, seq, address, _ = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 if type == SYN_PACKET:
                     syn_ack_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_ACK_PACKET)
+                    self.outgoing_seq += 1
+                    syn_ack_packet += f"ACK: {seq}".encode()
                     self.sock.sendto(syn_ack_packet, address)
                     self.connected = True
                     self.target_address = address
             except socket.timeout:
                 continue
+        if attempts == 0:
+            print("Something went wrong! could not establish connection with client...")
+            self.close_connection(force=True)
 
     def receive_packet(self):
         type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()

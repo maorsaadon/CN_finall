@@ -154,7 +154,6 @@ SYN_PACKET = 2  # Packet type for syn packet
 SYN_ACK_PACKET = 3  # Packet type for syn ack packet
 FILE_SIZE_INFO = 4  # a special packet type for indicating the file size to be sent.
 CLOSE_CONNECTION = 5  # Packet type for closing connection
-CLOSE_CONNECTION_ACK = 6  # Packet type for acknowledging connection closure
 REQUEST_PACKET = 7
 REQUEST_ACK = 8
 FORMAT = '!II'  # format string for struct.pack and struct.unpack
@@ -234,20 +233,24 @@ class RUDPClient:
                     self.ack(seq)
                     print(f"Downloaded pakcet - {seq} : {data}\n")
                 elif type == FILE_SIZE_INFO:
+                    self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
                     self.ack(seq)
                     print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
                 elif type == CLOSE_CONNECTION:
-                    close_connection_ack_packet = struct.pack(FORMAT, self.outgoing_seq, CLOSE_CONNECTION)
+                    self.received_packets[seq] = {'src address': address, 'data': b'CLOSE CONNECTION'}
                     self.outgoing_seq += 1
                     self.ack(seq)
+                    break
                 else: # type == REQUEST_ACK:
+                    self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
                     self.request_accepted = True
                     print("Request received by server...\n")
             except socket.timeout:
                 if packets_to_be_received == 0:
                     self.all_data_received = True
                 continue
+            print(packets_to_be_received + "\n")
 
     def ack(self, seq):
         """
@@ -269,24 +272,25 @@ def client_request(url, file_name):
 
     # Create a DHCPClient object
     dhcp_client = DHCPClient()
+    #
+    # # Call the send_discover_packet() function to initiate the DHCP process
+    # dhcp_client.send_discover_packet()
+    #
+    # dns_ip = dhcp_client.DNSserver_ip
+    #
+    # """
+    # *************************************************************
+    #                 DNS query
+    # **************************************************************
+    # """
+    #
+    # # Create a DNSClient object
+    # dns_client = DNSClient()
+    #
+    # # Query the DNS server for the IP address of downloadmanager.com
+    # app_server_ip = dns_client.query("downloadmanager.com")
 
-    # Call the send_discover_packet() function to initiate the DHCP process
-    dhcp_client.send_discover_packet()
-
-    dns_ip = dhcp_client.DNSserver_ip
-
-    """
-    *************************************************************
-                    DNS query
-    **************************************************************
-    """
-
-    # Create a DNSClient object
-    dns_client = DNSClient()
-
-    # Query the DNS server for the IP address of downloadmanager.com
-    app_server_ip = dns_client.query("downloadmanager.com")
-
+    app_server_ip = '127.0.0.1'
 
     """
     *************************************************************
@@ -295,7 +299,7 @@ def client_request(url, file_name):
     """
 
     rudp_c = RUDPClient()
-    rudp_c.connect(app_server_ip, 30000 + MAOR_LAST3_ID_DIG)
+    rudp_c.connect(app_server_ip, 20000 + DOVI_LAST3_ID_DIG)
 
     http_request = f"GET /{file_name} HTTP/1.1\r\nHost: {url}\r\n\r\n".encode()
 

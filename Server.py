@@ -100,7 +100,7 @@ class RUDPServer:
         return cwnd
 
     def send_data(self, address):
-        while True:
+        while len(self.packets_to_send) > 0:
             # slow start
             if not self.congestion_avoidance:
                 if self.cwnd >= self.slow_start_threshold:
@@ -124,7 +124,8 @@ class RUDPServer:
                     self.congestion_avoidance = False
 
             # send payload
-            self.send_packet_count()
+            if not self.file_info_sent:
+                self.send_packet_count()
 
             packets = []
             first_seq_sent = self.outgoing_seq
@@ -133,8 +134,7 @@ class RUDPServer:
                 print("\n")
                 print(f"Downloading packet - seq: {seq}, data: {data}\n")
                 self.sent_items[seq] = self.packets_to_send[seq]
-                self.outgoing_seq += 1
-
+            print("flag1\n")
             # Send all the packets at once using the socket
             time_of_sending = time.time()
             self.sock.sendto(b''.join(packets), address)
@@ -145,18 +145,16 @@ class RUDPServer:
                     type, _, _, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                     time_of_ack = time.time()
 
-                    acked_seq = data.decode()[5:]
-
-                    if type == ACK_PACKET and acked_seq in self.sent_items:  # if this is an acknowledgement packet for a
-                        # sent packet
-                        if acked_seq == first_seq_sent:
-                            self.rtt = time_of_sending - time_of_ack
-                            self.sock.settimeout(2)
+                    if type == ACK_PACKET:
+                        acked_seq = int(data.decode()[5:])
+                        if acked_seq in self.sent_items:  # if this is an acknowledgement packet for a
+                            if acked_seq == first_seq_sent:
+                                self.rtt = time_of_sending - time_of_ack
+                                self.sock.settimeout(2)
                         self.sent_items.pop(acked_seq)
                         self.packets_to_send.pop(acked_seq)
             except socket.timeout:
-                if len(self.packets_to_send) == len(self.sent_items) == 0:  # all packets were sent and acked
-                    break
+                pass
 
         # loop breaks if and only if all packets were sent and acked, and only then connection is closed:
         self.close_connection()
@@ -168,21 +166,25 @@ class RUDPServer:
             data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
             self.packets_to_send[seq] = data_packet
             seq += 1
+        self.outgoing_seq = seq
 
     def send_packet_count(self):
         seq_to_send = self.outgoing_seq
         self.outgoing_seq += 1
         packet_count = len(self.packets_to_send)
+        print(packet_count)
+        print(self.packets_to_send)
         file_size_info_packet = struct.pack(FORMAT, seq_to_send, FILE_SIZE_INFO)
         file_size_info_packet += f"Number of Packets: {packet_count}".encode()
-        self.sock.sendto(packet_count, self.target_address)
+        self.sock.sendto(file_size_info_packet, self.target_address)
 
         # receive ack for file info
         attempts = 10
         while not self.file_info_sent and attempts > 0:
             try:
-                type, seq, _, _ = self.receive_packet()
-                if type == ACK_PACKET and seq == seq_to_send:
+                type, _, _, data = self.receive_packet()
+                acked_seq = int(data.decode()[5:])
+                if type == ACK_PACKET and acked_seq == seq_to_send:
                     self.file_info_sent = True
                     return
             except socket.timeout:

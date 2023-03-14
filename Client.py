@@ -142,21 +142,20 @@ class DNSClient:
     *************************************************************
 """
 
-# Constants
+# Constants:
+
 CHUNK = 2048  # Maximum data size in packet
 HEADER_SIZE = 8  # Size of packet header
-ATTEMPT_LIMIT = 10
+
 DATA_PACKET = 0  # Packet type for data packets
-ACK_PACKET = 1  # Packet type for acknowledgement packets
-SYN_PACKET = 2  # Packet type for syn packet
-FYN_PACKET = 6
-SYN_ACK_PACKET = 3  # Packet type for syn ack packet
-FILE_SIZE_INFO = 4  # a special packet type for indicating the file size to be sent.
-CLOSE_CONNECTION = 5  # Packet type for closing connection
-REQUEST_PACKET = 7
-REQUEST_ACK = 8
+ACK = 1  # Packet type for acknowledgement packets
+SYN = 2  # Packet type for syn packet
+SYN_ACK = 3  # Packet type for syn ack packet
+FILE_SIZE_INFO = 4  # A special packet type for indicating the file size to be sent
+FIN = 5  # Packet type for closing connection
+
 FORMAT = '!II'  # format string for struct.pack and struct.unpack
-TIMEOUT = 2
+TIMEOUT = 2  # Default timeout value for the socket
 
 
 def deconstruct_packet(packet):
@@ -169,7 +168,6 @@ class RUDPClient:
         """
         Constructor for the ReliableUDP class
         :param host_adress: port and ip
-        :param server: boolean flag indicating whether this instance is running as a server or client
         """
         self.sock = s.socket(s.AF_INET, s.SOCK_DGRAM)  # Create a UDP socket
         self.sock.setblocking(False)  # Set socket to non-blocking mode
@@ -180,15 +178,20 @@ class RUDPClient:
         self.all_data_received = False
         self.request_sent = False
         self.request_accepted = False
+        self.connected = False
+
+    def increment_seq(self):
+        self.outgoing_seq += 1
 
     def connect(self, server_ip, server_port):
         self.server_address = server_ip, server_port
-        for i in range(ATTEMPT_LIMIT):
+
+        attempts = 10
+        for i in range(attempts):
             # create a SYN packet
-            syn_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_PACKET)
+            syn_packet = struct.pack(FORMAT, self.outgoing_seq, SYN)
             # send the SYN packet to the server
             self.sock.sendto(syn_packet, (server_ip, server_port))
-            self.outgoing_seq += 1
 
             time.sleep(2)  # 2 seconds grace period
 
@@ -260,8 +263,6 @@ class RUDPClient:
                     # send the SYN packet to the server
                     self.sock.sendto(fyn_packet, address)
 
-
-
     def ack(self, seq):
         """
         Sends an acknowledgement packet for a specified sequence number to the src address
@@ -273,7 +274,6 @@ class RUDPClient:
         print('sent ACK_PACKET', seq)
         self.outgoing_seq += 1
         print('sent ACK_PACKET', seq)
-
 
 
 def client_request(url, file_name):

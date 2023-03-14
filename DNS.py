@@ -1,15 +1,17 @@
 import socket
 
+
 class DNSserver: 
     def __init__(self):
         self.ip_domain = None
+        self.addresses = {}
 
     def recieve_dns_query(self):
         # create a UDP socket
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         # bind the socket to a local address and port
-        server_socket.bind(('127.0.0.1' , 53))
+        server_socket.bind(('127.0.0.1', 53))
 
         while True:
             # receive a DNS query packet
@@ -21,7 +23,6 @@ class DNSserver:
             # send the response packet to the client
             server_socket.sendto(response_packet, client_address)
 
-
     def handle_query_response(self, query_packet):
         """
         Given a DNS query packet, construct a DNS response packet and return it.
@@ -30,8 +31,8 @@ class DNSserver:
         domain = self.extract_domain(query_packet)
 
         # resolve the IP address for the domain name
-        if domain == 'downloadmanager.com':
-            self.ip_domain = '127.0.0.1'
+        if domain in self.addresses:
+            self.ip_domain = self.addresses[domain]
             print(f"Resolved {domain} to {self.ip_domain}, using our Database module. ")
         else:
             self.ip_domain = socket.gethostbyname(domain)
@@ -57,7 +58,6 @@ class DNSserver:
 
         return packet
 
-
     def extract_domain(self,query_packet):
         """
         Given a DNS query packet, extract the domain name from the question section
@@ -76,6 +76,7 @@ class DNSserver:
 if __name__ == '__main__':
     # create a DNS server instance
     dns_server = DNSserver()
+    dns_server.addresses = {'downloadmanager.com': '127.0.0.1'}
 
     # listen for incoming DNS queries and handle them
     dns_server.recieve_dns_query()

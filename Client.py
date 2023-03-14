@@ -207,7 +207,7 @@ class RUDPClient:
 
     def send_request(self, request):
         attempts = 10
-        while attempts > 0:
+        while attempts > 0 and not self.request_sent:
             try:
                 http_request_packet = struct.pack(FORMAT, self.outgoing_seq, REQUEST_PACKET)
                 self.outgoing_seq += 1
@@ -237,11 +237,13 @@ class RUDPClient:
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
                     self.ack(seq)
                     print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
-                elif type == CLOSE_CONNECTION:
+                elif packets_to_be_received == 0 and type == CLOSE_CONNECTION:
                     self.received_packets[seq] = {'src address': address, 'data': b'CLOSE CONNECTION'}
                     self.outgoing_seq += 1
                     self.ack(seq)
+                    self.all_data_received = True
                     break
+
                 else: # type == REQUEST_ACK:
                     self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
                     self.request_accepted = True
@@ -249,8 +251,9 @@ class RUDPClient:
             except socket.timeout:
                 if packets_to_be_received == 0:
                     self.all_data_received = True
+                    break
                 continue
-            print(packets_to_be_received + "\n")
+        self.sock.close()
 
     def ack(self, seq):
         """

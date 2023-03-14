@@ -21,7 +21,6 @@ SYN_PACKET = 2  # Packet type for syn packet
 SYN_ACK_PACKET = 3  # Packet type for syn ack packet
 FILE_SIZE_INFO = 4  # A special packet type for indicating the file size to be sent
 CLOSE_CONNECTION = 5  # Packet type for closing connection
-CLOSE_CONNECTION_ACK = 6  # Packet type for acknowledging connection closure
 REQUEST_PACKET = 7
 REQUEST_ACK = 8
 FORMAT = '!II'  # format string for struct.pack and struct.unpack
@@ -131,10 +130,7 @@ class RUDPServer:
             first_seq_sent = self.outgoing_seq
             for seq, data in self.packets_to_send.items():
                 packets.append(data)
-                print("\n")
-                print(f"Downloading packet - seq: {seq}, data: {data}\n")
                 self.sent_items[seq] = self.packets_to_send[seq]
-            print("flag1\n")
             # Send all the packets at once using the socket
             time_of_sending = time.time()
             self.sock.sendto(b''.join(packets), address)
@@ -158,6 +154,7 @@ class RUDPServer:
 
         # loop breaks if and only if all packets were sent and acked, and only then connection is closed:
         self.close_connection()
+        return
 
     def construct_payload(self, data):
         seq = self.outgoing_seq
@@ -172,8 +169,6 @@ class RUDPServer:
         seq_to_send = self.outgoing_seq
         self.outgoing_seq += 1
         packet_count = len(self.packets_to_send)
-        print(packet_count)
-        print(self.packets_to_send)
         file_size_info_packet = struct.pack(FORMAT, seq_to_send, FILE_SIZE_INFO)
         file_size_info_packet += f"Number of Packets: {packet_count}".encode()
         self.sock.sendto(file_size_info_packet, self.target_address)
@@ -205,13 +200,14 @@ class RUDPServer:
             attempts = 10
             while attempts > 0:
                 try:
-                    type, seq, _, _ = self.receive_packet()
-                    if type == CLOSE_CONNECTION_ACK and seq == seq_sent:
-                        force = True
-                        break
+                    type, _, _, data = self.receive_packet()
+                    if type == ACK_PACKET:
+                        ack_seq = data.decode()[5:]
+                        if ack_seq == self.outgoing_seq:
+                            force = True
+                            break
                 except socket.timeout:
                     attempts -= 1
-
         self.sock.close()
 
 

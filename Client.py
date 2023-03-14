@@ -384,5 +384,5 @@ def client_request(url, file_name):
 if __name__ == '__main__':
     # server = HTMLFormServer()
     # server.run()
-    client_request("www.google,com", "index.html")
+    client_request("www.google.com", "index.html")
 

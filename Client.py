@@ -337,7 +337,7 @@ def client_request(url, file_name):
         with open(file_name, 'w') as f:
             f.write(output)
         print("File successfuly saved!\n")
-        exit(1)
+        return
     else:
         print("Something went wrong!")
 

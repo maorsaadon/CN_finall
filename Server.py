@@ -46,6 +46,7 @@ class RUDPServer:
     """
     A simple Reliable UDP (RUDP) server implementation using Python's socket library.
     """
+
     def __init__(self, ip, port):
         self.sock = s.socket(s.AF_INET, s.SOCK_DGRAM)  # Create a UDP socket
         self.sock.setblocking(False)  # Set socket to non-blocking mode
@@ -127,10 +128,11 @@ class RUDPServer:
                 self.send_packet_count()
 
             packets = []
-            first_seq_sent = self.outgoing_seq
+            first_seq_sent = min(self.packets_to_send)
             for seq, data in self.packets_to_send.items():
+                print(struct.unpack(FORMAT, data[:HEADER_SIZE]))
                 packets.append(data)
-                self.sent_items[seq] = self.packets_to_send[seq]
+                self.sent_items[seq] = data
             # Send all the packets at once using the socket
             time_of_sending = time.time()
             self.sock.sendto(b''.join(packets), address)
@@ -147,8 +149,8 @@ class RUDPServer:
                             if acked_seq == first_seq_sent:
                                 self.rtt = time_of_sending - time_of_ack
                                 self.sock.settimeout(2)
-                        self.sent_items.pop(acked_seq)
-                        self.packets_to_send.pop(acked_seq)
+                            self.sent_items.pop(acked_seq)
+                            self.packets_to_send.pop(acked_seq)
             except socket.timeout:
                 pass
 
@@ -158,16 +160,15 @@ class RUDPServer:
 
     def construct_payload(self, data):
         seq = self.outgoing_seq
-        for i in range((self.file_size // CHUNK) + 1):
+        for i in range(self.file_size + CHUNK // CHUNK):
             data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
-            data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
+            data_packet += data[(i * CHUNK):min(len(data), (i + 1) * CHUNK)]
             self.packets_to_send[seq] = data_packet
             seq += 1
         self.outgoing_seq = seq
 
     def send_packet_count(self):
-        seq_to_send = self.outgoing_seq
-        self.outgoing_seq += 1
+        seq_to_send = min(0, min(self.packets_to_send) - 1)
         packet_count = len(self.packets_to_send)
         file_size_info_packet = struct.pack(FORMAT, seq_to_send, FILE_SIZE_INFO)
         file_size_info_packet += f"Number of Packets: {packet_count}".encode()
@@ -217,14 +218,14 @@ class RUDPServer:
 IP = "127.0.0.1"
 PORT = 20000 + DOVI_LAST3_ID_DIG
 
-def downloadmanager():
 
+def downloadmanager():
     rudp_s = RUDPServer(IP, PORT)
     rudp_s.bind()
     print("Ready to serve...")
     rudp_s.accept_connection()
 
-    time_to_wait = 30 # in seconds...
+    time_to_wait = 30  # in seconds...
     elapsed_time = 0
     current_time = time.time()
     time_stamp = current_time
@@ -268,5 +269,4 @@ def downloadmanager():
 
 
 if __name__ == '__main__':
-
     downloadmanager()

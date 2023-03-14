@@ -179,7 +179,6 @@ class RUDPClient:
         self.server_address = None  # tuple: (ip, port)
         self.all_data_received = False
         self.request_sent = False
-        self.request_accepted = False
 
     def connect(self, server_ip, server_port):
         self.server_address = server_ip, server_port
@@ -227,27 +226,26 @@ class RUDPClient:
         while not self.all_data_received:
             try:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
-                if type == DATA_PACKET:
-                    self.received_packets[seq] = {'src address': address, 'data': data}
-                    packets_to_be_received -= 1
-                    self.ack(seq)
-                    print(f"Downloaded pakcet - {seq} : {data}\n")
+                if type == REQUEST_ACK:
+                    self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
+                    self.request_sent = True
+                    print("Request received by server...\n")
                 elif type == FILE_SIZE_INFO:
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
                     self.ack(seq)
                     print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
+                elif type == DATA_PACKET:
+                    self.received_packets[seq] = {'src address': address, 'data': data}
+                    packets_to_be_received -= 1
+                    self.ack(seq)
+                    print(f"Downloaded pakcet - {seq} : {data}\n")
                 elif packets_to_be_received == 0 and type == CLOSE_CONNECTION:
                     self.received_packets[seq] = {'src address': address, 'data': b'CLOSE CONNECTION'}
                     self.outgoing_seq += 1
                     self.ack(seq)
                     self.all_data_received = True
                     break
-
-                else: # type == REQUEST_ACK:
-                    self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
-                    self.request_accepted = True
-                    print("Request received by server...\n")
             except socket.timeout:
                 if packets_to_be_received == 0:
                     self.all_data_received = True
@@ -335,9 +333,6 @@ def client_request(url, file_name):
 
 
 if __name__ == '__main__':
-    import threading
-    import Server
-    t = threading.Thread(target=Server)
-    t.start()
-
+    # import subprocess
+    # subprocess.run('sudo Sever.py')
     client_request("www.google.com", "index.html")

@@ -136,7 +136,6 @@ class RUDPServer:
             packets = []
             first_seq_sent = min(self.packets_to_send)
             for seq, data in self.packets_to_send.items():
-                print(struct.unpack(FORMAT, data[:HEADER_SIZE]))
                 packets.append(data)
                 self.sent_items[seq] = data
             # Send all the packets at once using the socket

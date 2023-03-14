@@ -178,6 +178,7 @@ class RUDPClient:
         self.server_address = None  # tuple: (ip, port)
         self.all_data_received = False
         self.request_sent = False
+        self.connected = False
 
     def connect(self, server_ip, server_port):
         self.server_address = server_ip, server_port
@@ -198,7 +199,7 @@ class RUDPClient:
                     acked_seq = data.decode()[5:]
                     if seq == acked_seq:
                         print("Connection with server established...\n")
-                    return True
+                    self.connected = True
             except socket.timeout:
                 pass
             self.server_address = None

@@ -159,8 +159,18 @@ TIMEOUT = 2  # Default timeout value for the socket
 
 
 def deconstruct_packet(packet):
+    """
+    Helper function to deconstruct a packet into its constituent parts.
+    :param packet: The packet to deconstruct
+    :return: A dictionary with the packet's type, sequence number, source address, and data
+    """
+    print(len(packet))
+    # Unpacks the sequence number and packet type from the packet's header
     seq, packet_type = struct.unpack(FORMAT, packet[0][:HEADER_SIZE])
+
+    # Returns a dictionary containing the packet's type, sequence number, source address, and data
     return {'type': packet_type, 'seq': seq, 'src_address': packet[1], 'data': packet[0][HEADER_SIZE:]}
+
 
 
 class RUDPClient:
@@ -185,20 +195,21 @@ class RUDPClient:
 
     def connect(self, server_ip, server_port):
         self.server_address = server_ip, server_port
+        print(self.server_address)
 
-        attempts = 10
+        attempts = 100
         for i in range(attempts):
             # create a SYN packet
             syn_packet = struct.pack(FORMAT, self.outgoing_seq, SYN)
             # send the SYN packet to the server
-            self.sock.sendto(syn_packet, (server_ip, server_port))
-
+            self.sock.sendto(syn_packet, self.server_address)
             time.sleep(2)  # 2 seconds grace period
 
             # receive syn ack
             try:
                 # wait for SYN-ACK response from server
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
+
                 # verify that the packet is a SYN-ACK packet
                 if type == SYN_ACK:
                     # send ACK packet to server

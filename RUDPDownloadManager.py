@@ -1,3 +1,4 @@
+import errno
 import random
 import socket
 import struct
@@ -101,16 +102,21 @@ class RUDPServer:
         while not self.connected:
             try:
                 # Receive a packet and extract its fields
-                type, seq, address, _ = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
+                type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
+                self.target_address = address
                 # Set the target address to the client address and a fixed port number based on MAOR_LAST3_ID_DIG
-                self.target_address = (address[0], 30000 + MAOR_LAST3_ID_DIG)
                 # If the packet is a SYN packet, send a SYN-ACK packet back to the client
                 if type == SYN:
                     syn_ack_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_ACK)
-                    self.sock.sendto(syn_ack_packet, self.target_address)
-                    # Increment the sequence number for the outgoing packets and set the connection status to connected
-                    self.increment_seq()
-                    self.connected = True
+                    sent = self.sock.sendto(syn_ack_packet, self.target_address)
+                    if sent == len(syn_ack_packet):
+                        print("Message sent successfully")
+                        # Increment the sequence number for the outgoing packets and set the connection status to connected
+                        self.increment_seq()
+                        self.connected = True
+                    else:
+                        print(f"Error sending message: {errno}")
+
                     # Print a message to indicate that the connection was established
                     print(f"Connection established with client at IP address: {address[0]}")
             except socket.timeout:
@@ -165,7 +171,7 @@ class RUDPServer:
                 self.send_packet_count()
 
             packets = []
-            first_seq_sent = min(self.packets_to_send.items())
+            first_seq_sent = min(self.packets_to_send)
             for seq, data in self.packets_to_send.items():
                 # don't send more packets than what the congestion window allows:
                 if first_seq_sent + seq < self.cwnd:
@@ -173,7 +179,13 @@ class RUDPServer:
 
             time_of_sending = time.time()
             # Send all the packets at once using the socket
-            self.sock.sendto(b''.join(packets), self.target_address)
+            if len(b''.join(packets)) > 0:
+                sent = self.sock.sendto(b''.join(packets), self.target_address)
+                print(len(b''.join(packets)))
+                if sent == len(b''.join(packets)):
+                    print("Message sent successfully")
+                else:
+                    print(f"Error sending message: {errno}")
 
             # Receive acks
             try:
@@ -196,21 +208,27 @@ class RUDPServer:
         self.close_connection()
 
     def construct_payload(self, data):
-        seq = self.outgoing_seq
-        for i in range((self.file_size + CHUNK) // CHUNK):
-            data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
-            data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
-            self.packets_to_send[seq] = data_packet
-            seq += 1
-        self.outgoing_seq = seq
+        if len(data) > 0:
+            seq = self.outgoing_seq
+            for i in range((self.file_size + CHUNK) // CHUNK):
+                data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
+                data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
+                self.packets_to_send[seq] = data_packet
+                seq += 1
+            self.outgoing_seq = seq
 
     def send_packet_count(self):
         seq = self.outgoing_seq
-        self.increment_seq()
         packet_count = len(self.packets_to_send)
         file_size_info_packet = struct.pack(FORMAT, seq, FILE_SIZE_INFO)
         file_size_info_packet += f"Number of Packets: {packet_count}".encode()
-        self.sock.sendto(file_size_info_packet, self.target_address)
+        sent = self.sock.sendto(file_size_info_packet, self.target_address)
+        if sent == len(file_size_info_packet):
+            print("Message sent successfully")
+            # Increment the sequence number for the outgoing packets and set the connection status to connected
+            self.increment_seq()
+        else:
+            print(f"Error sending message: {errno}")
 
         # receive ack for file info
         attempts = 10
@@ -275,13 +293,14 @@ def download_manager():
         try:
             t, seq, address, data = rudp_s.receive_packet()
             print("Request packet received...")
-
             # string manipulation to extract host name anf file name
             print("Extracting URL...")
             request_string = data.decode()
             request_lines = request_string.split("\r\n")
             file_name = request_lines[0][5: -9]
+            print(request_string)
             host_name = request_lines[1][6:]
+
 
             url = f"http://{host_name}/{file_name}"
             print(f"URL for http GET request: {url}")
@@ -289,6 +308,17 @@ def download_manager():
             # http get request
             print("Sending HTTP GET request...")
             response = requests.get(url)
+
+            request_received = False
+            for attempt in range(10):
+                if response.status_code >= 200 and response.status_code < 300:
+                    print("GET request was successful!")
+                    request_received = True
+                    break
+
+            if not request_received:
+                print(f"GET request failed with status code {response.status_code}")
+                return
 
             print(f"Getting file: {file_name} from: {host_name}...")
             print("Retreiving file data...")

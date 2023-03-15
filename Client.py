@@ -177,18 +177,12 @@ class RUDPClient:
         Constructor for the ReliableUDP class
         :param host_adress: port and ip
         """
-        # Create a UDP socket
-        self.sock = s.socket(s.AF_INET, s.SOCK_DGRAM)
-        # Set socket to non-blocking mode
-        self.sock.setblocking(False)
-        # Set socket timeout to 1 second
-        self.sock.settimeout(TIMEOUT)
-        # Dictionary for holding received data payloads
-        self.received_packets = {}
-        # Sequence number for outgoing packets
-        self.outgoing_seq = random.randint(0, (2 ** 16))
-        # Tuple: (ip, port)
-        self.server_address = None
+        self.sock = s.socket(s.AF_INET, s.SOCK_DGRAM)  # Create a UDP socket
+        self.sock.setblocking(False)  # Set socket to non-blocking mode
+        self.sock.settimeout(TIMEOUT)  # Set socket timeout to 1 second
+        self.received_packets = {}  # Dictionary for holding received data payloads
+        self.outgoing_seq = random.randint(0, (2 ** 16))  # Sequence number for outgoing packets
+        self.server_address = None  # tuple: (ip, port)
         self.all_data_received = False
         self.request_sent = False
         self.request_accepted = False
@@ -198,12 +192,6 @@ class RUDPClient:
         self.outgoing_seq += 1
 
     def connect(self, server_ip, server_port):
-        """
-        Connects to the server with the specified ip and port
-        :param server_ip: the ip address of the server
-        :param server_port: the port number of the server
-        :return: True if connection was successful, False otherwise
-        """
         self.server_address = server_ip, server_port
 
         attempts = 10
@@ -235,15 +223,11 @@ class RUDPClient:
         attempts = 10
         while attempts > 0 and not self.request_sent:
             try:
-                # pack the outgoing sequence number and data type into a binary string
                 http_request_packet = struct.pack(FORMAT, self.outgoing_seq, DATA)
-                # append the HTTP request to the packet
                 http_request_packet += request
-                # send the packet to the server
                 self.sock.sendto(http_request_packet, self.server_address)
-                # increment the outgoing sequence number
                 self.outgoing_seq += 1
-                # wait for the response from the server
+                self.request_sent = True
                 self.receive_data()
             except TypeError:
                 attempts -= 1
@@ -253,29 +237,22 @@ class RUDPClient:
             self.sock.close()
 
     def receive_data(self):
-        # set the number of packets to be received to infinity
         packets_to_be_received = float('inf')
         while not self.all_data_received:
             try:
-                # receive a packet from the server
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
-                # if the packet type is INFO, store the number of packets to be received
                 if type == INFO:
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
                     print(f"Received file size info. Number of packets to be downloaded is: {packets_to_be_received}\n")
-                    # send an ACK packet to acknowledge the receipt of the INFO packet
                     self.ack(seq)
-                # if the packet type is DATA, store the packet and send an ACK packet
                 if type == DATA:
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     self.ack(seq)
                     packets_to_be_received -= 1
-                    print(f"Downloaded packet - {seq} : {data}\n")
-                # if the packet type is ACK, store the packet
+                    print(f"Downloaded pakcet - {seq} : {data}\n")
                 if type == ACK:
                     self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
-                # if all packets have been received and the packet type is FIN_ACK, send a FIN_ACK packet and close the socket
                 if packets_to_be_received == 0 and type == FIN_ACK:
                     self.received_packets[seq] = {'src address': address, 'data': b'FIN'}
                     self.ack(seq)
@@ -285,11 +262,10 @@ class RUDPClient:
                     self.sock.close()
                     break
 
-            # if a packet is not received within the timeout period, and all packets have been received, send a FIN packet
             except socket.timeout:
                 if packets_to_be_received == 0:
                     fin_packet = struct.pack(FORMAT, self.outgoing_seq, FIN)
-                    # send the FIN packet to the server
+                    # send the SYN packet to the server
                     self.sock.sendto(fin_packet, self.server_address)
 
     def ack(self, seq):
@@ -297,15 +273,10 @@ class RUDPClient:
         Sends an acknowledgement packet for a specified sequence number to the src address
         :param seq: the sequence number of the packet to acknowledge
         """
-        # pack the outgoing sequence number and packet type into a binary string
         ack = struct.pack(FORMAT, self.outgoing_seq, ACK)
-        # append the sequence number of the packet being acknowledged to the ACK packet
         ack += f"ACK: {seq}".encode()
-        # send the ACK packet to the source address of the packet being acknowledged
         self.sock.sendto(ack, self.received_packets[seq]['src address'])
-        # increment the outgoing sequence number
         self.increment_seq()
-        # print a message to indicate that an ACK packet has been sent for the specified sequence number
         print(f"Sent ACK for seq: {seq}\n")
 
 
@@ -343,62 +314,58 @@ def client_request(url, file_name):
     **************************************************************
     """
 
-    # Create a RUDPClient instance and connect to the application server
+
     rudp_c = RUDPClient()
     rudp_c.connect(app_server_ip, 20000 + DOVI_LAST3_ID_DIG)
 
-    # Encode the HTTP GET request for the specified file and send it using RUDP
     http_request = f"GET /{file_name} HTTP/1.1\r\nHost: {url}\r\n\r\n".encode()
+
     rudp_c.send_request(http_request)
 
-    # Check if the request was sent successfully, and start waiting for data
     if not rudp_c.request_sent:
         return
+
     print("Preparing to download file...\n")
+
     rudp_c.receive_data()
 
-    # Check if all data packets have been received, and write the file to disk
     if rudp_c.all_data_received:
         print("File downloaded. Preparing file.\n")
         data = b''
-        # Sort the received packets by sequence number and concatenate their payload
         packets = sorted(rudp_c.received_packets.items(), key=lambda item: item[0])
+
         for i in range(len(packets)):
             data += packets[i][1]['data']
         output = data.decode('utf-8')
+
         print("Saving file...\n")
         with open(file_name, 'w') as f:
             f.write(output)
-        print("File successfully saved!\n")
+        print("File successfuly saved!\n")
         return
     else:
         print("Something went wrong!")
-        return
 
+    return
 
-from flask import Flask, request
 
 class HTMLFormServer:
 
     def __init__(self):
-        # Create a Flask app
         self.app = Flask(__name__)
 
-        # Define a route that handles GET and POST requests to '/'
         @self.app.route('/', methods=['GET', 'POST'])
         def handle_form():
             if request.method == 'POST':
-                # If this is a POST request, get the form data
                 host_name = request.form['hostName']
                 file_name = request.form['fileName']
-                # Do something with the form data (in this case, call the client_request function)
                 client_request(host_name, file_name)
+                # Do something with the form data (e.g. print it to the console)
                 print("Host Name:", host_name)
                 print("File Name:", file_name)
-                # Return a success message to the user
                 return "Form submitted successfully"
             else:
-                # If this is a GET request, serve the HTML form
+                # Serve the HTML file
                 return '''
                     <!DOCTYPE html>
                     <html>
@@ -419,12 +386,9 @@ class HTMLFormServer:
                 '''
 
     def run(self, host='localhost', port=5000):
-        # Start the Flask app
         self.app.run(host=host, port=port)
 
 
 if __name__ == '__main__':
-    # Create a server instance and run it
     server = HTMLFormServer()
     server.run()
-

@@ -431,10 +431,10 @@ def client_request(url, file_name, protocol):
     DHCP()
     app_server_ip = DNS()
 
-    if protocol == "RUDP":
-        RUDP_request(url, file_name, app_server_ip)
-    else:
+    if protocol == "TCP":
         TCP_request(url, file_name, app_server_ip)
+    else:
+        RUDP_request(url, file_name, app_server_ip)
 
 
 class HTMLFormServer:
@@ -472,8 +472,8 @@ class HTMLFormServer:
                                   <label for="protocol">Protocol:</label>
                                   <input type="radio" id="TCP" name="protocol" value="TCP">
                                   <label for="TCP">TCP</label>
-                                  <input type="radio" id="RUDP" name="protocol" value="RUDP">
-                                  <label for="RUDP">RUDP</label><br><br>
+                                  <input type="radio" id="ReliableUDP" name="protocol" value="ReliableUDP">
+                                  <label for="ReliableUDP">Reliable UDP</label><br><br>
                                   <input type="submit" value="Submit Request">
                                 </form>
                               </body>

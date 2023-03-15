@@ -418,6 +418,7 @@ def TCP_request(url, file_name, app_server_ip):
         f.write(output)
 
     print("File successfully saved!\n")
+    return
 
 
 def client_request(url, file_name, protocol):

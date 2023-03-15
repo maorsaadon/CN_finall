@@ -164,13 +164,10 @@ def deconstruct_packet(packet):
     :param packet: The packet to deconstruct
     :return: A dictionary with the packet's type, sequence number, source address, and data
     """
-    print(len(packet))
     # Unpacks the sequence number and packet type from the packet's header
     seq, packet_type = struct.unpack(FORMAT, packet[0][:HEADER_SIZE])
-
     # Returns a dictionary containing the packet's type, sequence number, source address, and data
     return {'type': packet_type, 'seq': seq, 'src_address': packet[1], 'data': packet[0][HEADER_SIZE:]}
-
 
 
 class RUDPClient:
@@ -195,16 +192,16 @@ class RUDPClient:
 
     def connect(self, server_ip, server_port):
         self.server_address = server_ip, server_port
-        print(self.server_address)
 
-        attempts = 100
+        attempts = 10
         for i in range(attempts):
             # create a SYN packet
             syn_packet = struct.pack(FORMAT, self.outgoing_seq, SYN)
             # send the SYN packet to the server
-            self.sock.sendto(syn_packet, self.server_address)
-            time.sleep(2)  # 2 seconds grace period
+            self.sock.sendto(syn_packet, (server_ip, server_port))
 
+            time.sleep(1)  # 2 seconds grace period
+            print(f"Connection: attempt: {i + 1}")
             # receive syn ack
             try:
                 # wait for SYN-ACK response from server
@@ -216,7 +213,7 @@ class RUDPClient:
                     print("Connection with server established...\n")
                     return True
             except socket.timeout:
-                print("Somthing went wrong.....\n")
+                print("Somthing went wrong. trying again...\n")
         self.server_address = None
         return False
 
@@ -243,11 +240,10 @@ class RUDPClient:
             try:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 if type == INFO:
-                    print('filesize')
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
+                    print(f"Received file size info. Number of packets to be downloaded is: {packets_to_be_received}\n")
                     self.ack(seq)
-                    print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
                 if type == DATA:
                     print('Data packet')
                     self.received_packets[seq] = {'src address': address, 'data': data}

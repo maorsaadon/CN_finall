@@ -315,36 +315,36 @@ def download_manager():
             host_name = request_lines[1][6:]
 
             url = f"http://{host_name}/{file_name}"
-            print(f"URL for http GET request: {url}")
+            print(f"URL for http GET request: {url}.\n")
 
             # http get request
-            print("Sending HTTP GET request...")
+            print("Sending HTTP GET request...\n")
             response = requests.get(url)
 
             request_received = False
             for attempt in range(10):
                 if response.status_code >= 200 and response.status_code < 300:
-                    print("GET request was successful!")
+                    print("GET request successful.\n")
                     request_received = True
                     break
 
             if not request_received:
-                print(f"GET request failed with status code {response.status_code}")
+                print(f"GET request failed with status code {response.status_code}.\n")
                 return
 
-            print(f"Getting file: {file_name} from: {host_name}...")
-            print("Retreiving file data...")
+            print(f"Getting file: {file_name} from: {host_name}...\n")
+            print("Retreiving file data...\n")
             data = response.content
 
             rudp_s.file_size = len(data)
 
-            print("Preparing file for download...")
+            print("Preparing file for download...\n")
             rudp_s.construct_payload(data)
 
-            print("Downloading file...")
+            print("Downloading file...\n")
             rudp_s.send_data()
 
-            print("Download completed successfully!")
+            print("Download completed successfully!\n")
 
             return
 

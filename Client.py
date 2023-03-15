@@ -423,8 +423,8 @@ def TCP_request(url, file_name, app_server_ip):
 
 def client_request(url, file_name, protocol):
 
-    # DHCP()
-    app_server_ip = '127.0.0.1'  # DNS()
+    DHCP()
+    app_server_ip = DNS()
 
     if protocol == "TCP":
         TCP_request(url, file_name, app_server_ip)

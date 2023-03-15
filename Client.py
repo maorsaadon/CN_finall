@@ -147,11 +147,11 @@ class DNSClient:
 CHUNK = 2048  # Maximum data size in packet
 HEADER_SIZE = 8  # Size of packet header
 
-DATA_PACKET = 0  # Packet type for data packets
+DATA = 0  # Packet type for data packets
 ACK = 1  # Packet type for acknowledgement packets
 SYN = 2  # Packet type for syn packet
 SYN_ACK = 3  # Packet type for syn ack packet
-FILE_SIZE_INFO = 4  # A special packet type for indicating the file size to be sent
+INFO = 4  # A special packet type for indicating the file size to be sent
 FIN = 5  # Packet type for closing connection
 
 FORMAT = '!II'  # format string for struct.pack and struct.unpack
@@ -200,7 +200,7 @@ class RUDPClient:
                 # wait for SYN-ACK response from server
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 # verify that the packet is a SYN-ACK packet
-                if type == SYN_ACK_PACKET:
+                if type == SYN_ACK:
                     # send ACK packet to server
                     print("Connection with server established...\n")
                     return True
@@ -213,7 +213,7 @@ class RUDPClient:
         attempts = 10
         while attempts > 0 and not self.request_sent:
             try:
-                http_request_packet = struct.pack(FORMAT, self.outgoing_seq, REQUEST_PACKET)
+                http_request_packet = struct.pack(FORMAT, self.outgoing_seq, DATA)
                 http_request_packet += request
                 self.sock.sendto(http_request_packet, self.server_address)
                 self.outgoing_seq += 1
@@ -231,25 +231,25 @@ class RUDPClient:
         while not self.all_data_received:
             try:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
-                if type == FILE_SIZE_INFO:
+                if type == INFO:
                     print('filesize')
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
                     self.ack(seq)
                     print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
-                if type == DATA_PACKET:
+                if type == DATA:
                     print('Data packet')
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     self.ack(seq)
                     packets_to_be_received -= 1
                     print(f"Downloaded pakcet - {seq} : {data}\n")
-                if type == ACK_PACKET:
+                if type == ACK:
                     print('Ack packet')
                     self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
-                if packets_to_be_received == 0 and type == CLOSE_CONNECTION:
+                if packets_to_be_received == 0 and type == FIN:
                     print('close connection packet')
-                    self.received_packets[seq] = {'src address': address, 'data': b'CLOSE CONNECTION'}
-                    close_packet = struct.pack(FORMAT, self.outgoing_seq, CLOSE_CONNECTION)
+                    self.received_packets[seq] = {'src address': address, 'data': b'FIN'}
+                    close_packet = struct.pack(FORMAT, self.outgoing_seq, FIN)
                     self.outgoing_seq += 1
                     # send the SYN packet to the server
                     self.sock.sendto(close_packet, address)
@@ -257,23 +257,23 @@ class RUDPClient:
                     self.sock.close()
                     print('close the socket...')
                     break
+
             except socket.timeout:
                 if packets_to_be_received == 0:
-                    fyn_packet = struct.pack(FORMAT, self.outgoing_seq, FYN_PACKET)
+                    fin_packet = struct.pack(FORMAT, self.outgoing_seq, FIN)
                     # send the SYN packet to the server
-                    self.sock.sendto(fyn_packet, address)
+                    self.sock.sendto(fin_packet, self.server_address)
 
     def ack(self, seq):
         """
         Sends an acknowledgement packet for a specified sequence number to the src address
         :param seq: the sequence number of the packet to acknowledge
         """
-        ack = struct.pack(FORMAT, self.outgoing_seq, ACK_PACKET)
+        ack = struct.pack(FORMAT, self.outgoing_seq, ACK)
         ack += f"ACK: {seq}".encode()
         self.sock.sendto(ack, self.received_packets[seq]['src address'])
-        print('sent ACK_PACKET', seq)
-        self.outgoing_seq += 1
-        print('sent ACK_PACKET', seq)
+        self.increment_seq()
+        print(f"Sent ACK for seq: {seq}")
 
 
 def client_request(url, file_name):

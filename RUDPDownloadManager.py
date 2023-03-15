@@ -1,3 +1,4 @@
+import errno
 import random
 import socket
 import struct
@@ -89,6 +90,9 @@ class RUDPServer:
         self.file_info_sent = False
         self.increment_seq = lambda: setattr(self, "outgoing_seq", self.outgoing_seq + 1)
 
+    def confirm_sent(self, bytes, packet):
+        return sent == len(packet)
+
     def bind(self):
         """
         Bind the socket to the specified address and port.
@@ -104,21 +108,19 @@ class RUDPServer:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 self.target_address = address
                 # Set the target address to the client address and a fixed port number based on MAOR_LAST3_ID_DIG
-                self.target_address = (address[0], 30000 + MAOR_LAST3_ID_DIG)
+                self.target_address = address
                 # If the packet is a SYN packet, send a SYN-ACK packet back to the client
                 if type == SYN:
                     syn_ack_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_ACK)
-                    sent = self.sock.sendto(syn_ack_packet, self.target_address)
-                    if sent == len(syn_ack_packet):
-                        print("Message sent successfully")
-                        # Increment the sequence number for the outgoing packets and set the connection status to connected
-                        self.increment_seq()
+                    bytes = self.sock.sendto(syn_ack_packet, self.target_address)
+                    self.increment_seq()
+                    if self.confirm_sent(bytes, syn_ack_packet):
                         self.connected = True
+                        print(f"Connection established with client at IP address: {address[0]}")
                     else:
                         print(f"Error sending message: {errno}")
 
                     # Print a message to indicate that the connection was established
-                    print(f"Connection established with client at IP address: {address[0]}")
             except socket.timeout:
                 # If a timeout occurs while waiting for a packet, continue the loop and try again
                 continue
@@ -222,9 +224,9 @@ class RUDPServer:
         packet_count = len(self.packets_to_send)
         file_size_info_packet = struct.pack(FORMAT, seq, FILE_SIZE_INFO)
         file_size_info_packet += f"Number of Packets: {packet_count}".encode()
-        sent = self.sock.sendto(file_size_info_packet, self.target_address)
-        if sent == len(file_size_info_packet):
-            print("Message sent successfully")
+        bytes = self.sock.sendto(file_size_info_packet, self.target_address)
+        if self.confirm_sent(bytes, file_size_info_packet):
+            print("File info sent successfully")
             # Increment the sequence number for the outgoing packets and set the connection status to connected
 
         else:

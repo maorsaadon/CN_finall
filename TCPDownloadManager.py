@@ -88,6 +88,7 @@ def download_manager():
         print("GET request redirection was successful.\n")
     # If the GET request still fails, print an error message and return
     else:
+        tcp_s.socket().sendto(response.content, address)
         print(f"GET request failed with status code {response.status_code}.\n")
         return
 

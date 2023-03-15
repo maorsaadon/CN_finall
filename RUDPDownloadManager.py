@@ -107,8 +107,6 @@ class RUDPServer:
                 # Receive a packet and extract its fields
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 self.target_address = address
-                # Set the target address to the client address and a fixed port number based on MAOR_LAST3_ID_DIG
-                self.target_address = address
                 # If the packet is a SYN packet, send a SYN-ACK packet back to the client
                 if type == SYN:
                     syn_ack_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_ACK)
@@ -228,7 +226,6 @@ class RUDPServer:
         if self.confirm_sent(bytes, file_size_info_packet):
             print("File info sent successfully")
             # Increment the sequence number for the outgoing packets and set the connection status to connected
-
         else:
             print(f"Error sending message: {errno}")
 

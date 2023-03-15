@@ -201,6 +201,7 @@ class RUDPClient:
             self.sock.sendto(syn_packet, (server_ip, server_port))
 
             time.sleep(1)  # 2 seconds grace period
+
             print(f"Connection: attempt: {i + 1}")
             # receive syn ack
             try:

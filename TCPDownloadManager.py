@@ -1,86 +1,116 @@
 import socket as s
 import requests
-import threading
 
 DOVI_LAST3_ID_DIG = 494
 MAOR_LAST3_ID_DIG = 421
 
 
 class TCPServer:
-        """
-        A simple TCP server implementation
-        """
+    """
+    A simple TCP server implementation
+    """
+    def __init__(self, ip, port):
+        # Creates a TCP socket
+        self.sock = s.socket(s.AF_INET, s.SOCK_STREAM)
+        self.address = ip, port
 
-        def __init__(self, ip, port):
-            # Creates a TCP socket
-            self.sock = s.socket(s.AF_INET, s.SOCK_STREAM)
-            self.address = ip, port
+    def bind(self):
+        self.sock.setsockopt(s.SOL_SOCKET, s.SO_REUSEADDR, 1)
+        self.sock.bind(self.address)
 
-        def bind(self):
-            self.sock.bind(self.address)
-
-        def get_request(self):
-
-
+    def socket(self):
+        return self.sock
 
 
 IP = '127.0.0.1'
 PORT = 20000 + DOVI_LAST3_ID_DIG
 CHUNK = 1024
 
-def get_request(conn, addr):
 
-    print(f"New connection from {addr}")
+def download_manager():
+
+    tcp_s = TCPServer(IP, PORT)
     try:
-        # Receive data from the client
-        request = conn.recv(CHUNK)
-        if not request:
+        tcp_s.bind()
+        print("Ready to serve...\n")
+    except OSError as e:
+        print(f"Error binding to address {IP}:{PORT}: {e}")
+        return
+
+    tcp_s.socket().listen()
+    _, address = tcp_s.socket().accept()
+
+    print("Connection with client established...\n")
+
+    request_received = False
+
+    request = b''
+
+    while not request_received:
+        try:
+            request = tcp_s.socket().recv(CHUNK)
+        except ConnectionResetError as e:
+            print(f"Error receiving request from client: {e}")
             return
-        # Decode the received request
-        request_str = request.decode('utf-8')
-        # Extract the requested URL from the HTTP GET request
-        url_start = request_str.find('GET ') + 4
-        url_end = request_str.find(' HTTP/1.1')
-        if url_start == -1 or url_end == -1:
-            raise ValueError("Invalid HTTP request")
-        url = request_str[url_start:url_end]
-        # Validate the requested URL
-        if not url.startswith('http://') and not url.startswith('https://'):
-            raise ValueError("Invalid URL scheme")
-        # Download the requested file from the URL
-        file = urllib.request.urlopen(url)
-        # Send the HTTP response headers to the client
-        conn.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
-        # Send the file content to the client
-        while True:
-            data = file.read(BUFFER_SIZE)
-            if not data:
-                break
-            conn.sendall(data)
-    except ValueError as e:
-        # Send an error message to the client
-        conn.sendall(f"HTTP/1.1 400 Bad Request\r\n\r\n{str(e)}".encode('utf-8'))
-    except urllib.error.URLError as e:
-        # Send an error message to the client
-        conn.sendall(f"HTTP/1.1 404 Not Found\r\n\r\n{str(e)}".encode('utf-8'))
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-    finally:
-        # Close the connection
-        conn.close()
-        print(f"Connection from {addr} closed")
+        if request:
+            request_received = True
 
-# Create a TCP socket
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# Bind the socket to the specified host and port
-server_socket.bind((HOST, PORT))
-# Listen for incoming connections
-server_socket.listen()
-print(f"Server listening on {HOST}:{PORT}")
+    print("Got HTTP GET request from client")
 
-while True:
-    # Accept incoming connections
-    conn, addr = server_socket.accept()
-    # Handle each request in a separate thread
-    thread = threading.Thread(target=handle_request, args=(conn, addr))
-    thread.start()
+    # Extract the file name and host name from the request data
+    print("Extracting URL...")
+    request_string = request.decode()
+    request_lines = request_string.split("\r\n")
+    try:
+        file_name = request_lines[0][5: -9]
+    except IndexError as e:
+        print(f"Error extracting file name from request: {e}")
+        return
+    try:
+        host_name = request_lines[1][6:]
+    except IndexError as e:
+        print(f"Error extracting host name from request: {e}")
+        return
+
+    # Construct the URL for the HTTP GET request
+    url = f"http://{host_name}/{file_name}"
+    print(f"URL for http GET request: {url}.\n")
+
+    # Redirect HTTP GET request to the server
+    print("Redirecting HTTP GET request...\n")
+    try:
+        response = requests.get(url)
+    except requests.exceptions.RequestException as e:
+        print(f"Error sending request to server: {e}")
+        return
+
+    if 200 <= response.status_code < 300:
+        print("GET request redirection was successful.\n")
+    # If the GET request still fails, print an error message and return
+    else:
+        print(f"GET request failed with status code {response.status_code}.\n")
+        return
+
+    # Retrieve the file data from the response
+    print(f"Getting file: {file_name} from: {host_name}...\n")
+    print("Retrieving file data...\n")
+    data = response.content
+
+    print("Sending desired data to client...\n")
+    try:
+        tcp_s.socket().sendto(data, address)
+    except ConnectionResetError as e:
+        print(f"Error sending response to client: {e}")
+        return
+
+    print("File sent.\n")
+
+    print("Closing connection...\n")
+
+    tcp_s.socket().close()
+
+    print("Connection closed.\n")
+
+
+if __name__ == '__main__':
+    download_manager()

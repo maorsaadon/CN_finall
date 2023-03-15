@@ -341,20 +341,14 @@ def download_manager():
             url = f"http://{host_name}/{file_name}"
             print(f"URL for http GET request: {url}.\n")
 
-            # Send an HTTP GET request to the server
-            print("Sending HTTP GET request...\n")
+            # Redirect HTTP GET request to the server
+            print("Redirecting HTTP GET request...\n")
             response = requests.get(url)
 
-            # Retry up to 10 times if the GET request fails
-            request_received = False
-            for attempt in range(10):
-                if response.status_code >= 200 and response.status_code < 300:
-                    print("GET request successful.\n")
-                    request_received = True
-                    break
-
+            if 200 <= response.status_code < 300:
+                print("GET request successful.\n")
             # If the GET request still fails, print an error message and return
-            if not request_received:
+            else:
                 print(f"GET request failed with status code {response.status_code}.\n")
                 return
 

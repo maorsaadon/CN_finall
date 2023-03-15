@@ -99,6 +99,7 @@ class RUDPServer:
         """
         Bind the socket to the specified address and port.
         """
+        self.sock.setsockopt(s.SOL_SOCKET, s.SO_REUSEADDR, 1)
         # Bind the socket to the server address specified in self.server_address
         self.sock.bind(self.server_address)
 
@@ -321,14 +322,10 @@ def download_manager():
             print("Sending HTTP GET request...\n")
             response = requests.get(url)
 
-            request_received = False
-            for attempt in range(10):
-                if response.status_code >= 200 and response.status_code < 300:
-                    print("GET request successful.\n")
-                    request_received = True
-                    break
-
-            if not request_received:
+            if 200 <= response.status_code < 300:
+                print("GET request redirection was successful.\n")
+                # If the GET request still fails, print an error message and return
+            else:
                 print(f"GET request failed with status code {response.status_code}.\n")
                 return
 

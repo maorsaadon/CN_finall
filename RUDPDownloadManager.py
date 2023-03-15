@@ -12,7 +12,7 @@ MAOR_LAST3_ID_DIG = 421
 
 # Constants:
 # Maximum data size in packet
-CHUNK = 1024
+CHUNK = 4096
 # Size of packet header
 HEADER_SIZE = 8
 
@@ -99,6 +99,7 @@ class RUDPServer:
         """
         Bind the socket to the specified address and port.
         """
+        self.sock.setsockopt(s.SOL_SOCKET, s.SO_REUSEADDR, 1)
         # Bind the socket to the server address specified in self.server_address
         self.sock.bind(self.server_address)
 
@@ -145,8 +146,7 @@ class RUDPServer:
     def send_data(self):
         all_packets_sent = False
         while self.packets_to_send and not all_packets_sent:
-            # Congestion Control algorithm:
-
+            # CC algo:
             # slow start
             if not self.congestion_avoidance:
                 if self.cwnd >= self.slow_start_threshold:
@@ -171,7 +171,7 @@ class RUDPServer:
                     self.congestion_avoidance = False
 
             # send payload
-            # If file info has not been sent, send it first
+
             if not self.file_info_sent:
                 self.send_packet_count()
 
@@ -209,6 +209,7 @@ class RUDPServer:
                         acked_seq = int(data.decode()[5:])
                         if acked_seq in self.packets_to_send:  # if this is an acknowledgement packet for a
                             if acked_seq == first_seq_sent:
+
                                 # calculate RTT
                                 self.rtt = time_of_sending - time_of_ack
                                 self.sock.settimeout(max(10, int(self.rtt // 2)))
@@ -219,7 +220,6 @@ class RUDPServer:
             except socket.timeout:
                 continue
 
-        # close the connection
         self.close_connection()
 
     def construct_payload(self, data):
@@ -302,7 +302,7 @@ class RUDPServer:
         print("Socket closed.\n")
 
 
-# app server
+# App server:
 #Define IP address and port number
 IP = "127.0.0.1"
 PORT = 20000 + DOVI_LAST3_ID_DIG
@@ -316,28 +316,18 @@ def download_manager():
 
     rudp_s.accept_connection()
 
-    # Create a RUDPServer object with the defined IP and port number
-    rudp_s = RUDPServer(IP, PORT)
-    rudp_s.bind()
-    print("Ready to serve...\n")
-
-    # Accept incoming connection requests
-    rudp_s.accept_connection()
-
     while True:
         try:
-            # Receive a packet from the client
             t, seq, address, data = rudp_s.receive_packet()
             print("Request packet received...\n")
 
-            # Extract the file name and host name from the request data
+            # string manipulation to extract host name anf file name
             print("Extracting URL...")
             request_string = data.decode()
             request_lines = request_string.split("\r\n")
             file_name = request_lines[0][5: -9]
             host_name = request_lines[1][6:]
 
-            # Construct the URL for the HTTP GET request
             url = f"http://{host_name}/{file_name}"
             print(f"URL for http GET request: {url}.\n")
 
@@ -352,27 +342,25 @@ def download_manager():
                 print(f"GET request failed with status code {response.status_code}.\n")
                 return
 
-            # Retrieve the file data from the response
             print(f"Getting file: {file_name} from: {host_name}...\n")
             print("Retreiving file data...\n")
             data = response.content
 
-            # Set the file size in the RUDPServer object and construct the payload
             rudp_s.file_size = len(data)
+
             print("Preparing file for download...\n")
             rudp_s.construct_payload(data)
 
-            # Send the data packets to the client using RUDP
             print("Downloading file...\n")
             rudp_s.send_data()
 
-            # Print a success message and return
             print("Download completed successfully!\n")
+
             return
 
-        # Ignore socket.timeout exceptions and continue
         except socket.timeout:
             pass
+
 
 if __name__ == '__main__':
     download_manager()

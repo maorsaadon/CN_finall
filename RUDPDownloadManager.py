@@ -23,6 +23,8 @@ SYN = 2  # Packet type for syn packet
 SYN_ACK = 3  # Packet type for syn ack packet
 FILE_SIZE_INFO = 4  # A special packet type for indicating the file size to be sent
 FIN = 5  # Packet type for closing connection
+FIN_ACK = 6
+
 
 # struct.pack format string
 FORMAT = '!II'
@@ -91,7 +93,7 @@ class RUDPServer:
         self.increment_seq = lambda: setattr(self, "outgoing_seq", self.outgoing_seq + 1)
 
     def confirm_sent(self, bytes, packet):
-        return sent == len(packet)
+        return bytes == len(packet)
 
     def bind(self):
         """
@@ -141,7 +143,8 @@ class RUDPServer:
         return cwnd
 
     def send_data(self):
-        while self.packets_to_send:
+        all_packets_sent = False
+        while self.packets_to_send and not all_packets_sent:
             # CC algo:
             # slow start
             if not self.congestion_avoidance:
@@ -167,6 +170,7 @@ class RUDPServer:
                     self.congestion_avoidance = False
 
             # send payload
+
             if not self.file_info_sent:
                 self.send_packet_count()
 
@@ -174,33 +178,43 @@ class RUDPServer:
             first_seq_sent = min(self.packets_to_send)
             for seq, data in self.packets_to_send.items():
                 # don't send more packets than what the congestion window allows:
-                if first_seq_sent + seq <= self.cwnd:
+                if seq - first_seq_sent <= self.cwnd:
                     packets.append(data)
 
             time_of_sending = time.time()
             # Send all the packets at once using the socket
             if len(b''.join(packets)) > 0:
                 sent = self.sock.sendto(b''.join(packets), self.target_address)
-                print(len(b''.join(packets)))
                 if sent == len(b''.join(packets)):
-                    print("Message sent successfully")
+                    print(f"Packet sent successfully.\n")
                 else:
                     print(f"Error sending message: {errno}")
 
             # Receive acks
             try:
                 while self.packets_to_send:
+
                     packet_type, _, _, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
-                    time_of_ack = time.time()
-                    if packet_type == ACK:
+
+                    if packet_type == FIN:
+                        all_packets_sent = True
+                        print("All packets sent successfully to client.\n")
                         break
+
                     if packet_type == ACK:
+
+                        time_of_ack = time.time()
+
                         acked_seq = int(data.decode()[5:])
                         if acked_seq in self.packets_to_send:  # if this is an acknowledgement packet for a
                             if acked_seq == first_seq_sent:
+
+                                # calculate RTT
                                 self.rtt = time_of_sending - time_of_ack
-                                self.sock.settimeout(self.rtt / 2)
-                            self.sent_items[acked_seq](self.packets_to_send.pop(acked_seq))
+                                self.sock.settimeout(max(10, int(self.rtt // 2)))
+
+                            # remove packet from packets_to_send and save in sent_items
+                            self.sent_items[acked_seq] = self.packets_to_send.pop(acked_seq)
 
             except socket.timeout:
                 continue
@@ -224,7 +238,7 @@ class RUDPServer:
         file_size_info_packet += f"Number of Packets: {packet_count}".encode()
         bytes = self.sock.sendto(file_size_info_packet, self.target_address)
         if self.confirm_sent(bytes, file_size_info_packet):
-            print("File info sent successfully")
+            print("File info sent successfully.\n")
             # Increment the sequence number for the outgoing packets and set the connection status to connected
         else:
             print(f"Error sending message: {errno}")
@@ -248,7 +262,7 @@ class RUDPServer:
         if not force:
             # construct the CLOSE_CONNECTION packet and send it
             seq = self.outgoing_seq
-            packet = struct.pack(FORMAT, seq, FIN)
+            packet = struct.pack(FORMAT, seq, FIN_ACK)
             self.sock.sendto(packet, self.target_address)
             self.increment_seq()
 
@@ -260,7 +274,7 @@ class RUDPServer:
                     if packet_type == ACK:
                         acked_seq = int(data.decode()[5:])
                         if acked_seq == seq:
-                            print("Closing the socket...")
+                            print("Closing the socket...\n")
                             break
                 except socket.timeout:
                     attempts -= 1
@@ -268,10 +282,10 @@ class RUDPServer:
             force = not attempts
 
         if force:
-            print(f"Something went wrong. {comment}. Forcing disconnection with client...")
+            print(f"Something went wrong. {comment}. Forcing disconnection with client...\n")
 
         self.sock.close()
-        print("Socket closed.")
+        print("Socket closed.\n")
 
 
 # app server
@@ -284,14 +298,14 @@ def download_manager():
 
     rudp_s = RUDPServer(IP, PORT)
     rudp_s.bind()
-    print("Ready to serve...")
+    print("Ready to serve...\n")
 
     rudp_s.accept_connection()
 
     while True:
         try:
             t, seq, address, data = rudp_s.receive_packet()
-            print("Request packet received...")
+            print("Request packet received...\n")
 
             # string manipulation to extract host name anf file name
             print("Extracting URL...")

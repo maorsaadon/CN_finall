@@ -153,6 +153,7 @@ SYN = 2  # Packet type for syn packet
 SYN_ACK = 3  # Packet type for syn ack packet
 INFO = 4  # A special packet type for indicating the file size to be sent
 FIN = 5  # Packet type for closing connection
+FIN_ACK = 6
 
 FORMAT = '!II'  # format string for struct.pack and struct.unpack
 TIMEOUT = 2  # Default timeout value for the socket
@@ -246,24 +247,19 @@ class RUDPClient:
                     print(f"Received file size info. Number of packets to be downloaded is: {packets_to_be_received}\n")
                     self.ack(seq)
                 if type == DATA:
-                    print('Data packet')
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     self.ack(seq)
                     packets_to_be_received -= 1
                     print(f"Downloaded pakcet - {seq} : {data}\n")
                 if type == ACK:
-                    print('Ack packet')
                     self.received_packets[seq] = {'src address': address, 'data': b'REQUEST ACK'}
-                if packets_to_be_received == 0 and type == FIN:
-                    print('close connection packet')
+                if packets_to_be_received == 0 and type == FIN_ACK:
                     self.received_packets[seq] = {'src address': address, 'data': b'FIN'}
-                    close_packet = struct.pack(FORMAT, self.outgoing_seq, FIN)
-                    self.outgoing_seq += 1
-                    # send the SYN packet to the server
-                    self.sock.sendto(close_packet, address)
+                    self.ack(seq)
+                    fin_ack_packet = struct.pack(FORMAT, (self.outgoing_seq - 1), FIN_ACK)
+                    self.sock.sendto(fin_ack_packet, address)
                     self.all_data_received = True
                     self.sock.close()
-                    print('close the socket...')
                     break
 
             except socket.timeout:
@@ -281,7 +277,7 @@ class RUDPClient:
         ack += f"ACK: {seq}".encode()
         self.sock.sendto(ack, self.received_packets[seq]['src address'])
         self.increment_seq()
-        print(f"Sent ACK for seq: {seq}")
+        print(f"Sent ACK for seq: {seq}\n")
 
 
 def client_request(url, file_name):
@@ -290,33 +286,35 @@ def client_request(url, file_name):
                            DHCP request
     **************************************************************
     """
-
-    # Create a DHCPClient object
-    dhcp_client = DHCPClient()
-
-    # Call the send_discover_packet() function to initiate the DHCP process
-    dhcp_client.send_discover_packet()
-
-    dns_ip = dhcp_client.DNSserver_ip
-
-    """
-    *************************************************************
-                    DNS query
-    **************************************************************
-    """
-
-    # Create a DNSClient object
-    dns_client = DNSClient()
-
-    # Query the DNS server for the IP address of downloadmanager.com
-    app_server_ip = dns_client.query("downloadmanager.com")
-    print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
+    #
+    # # Create a DHCPClient object
+    # dhcp_client = DHCPClient()
+    #
+    # # Call the send_discover_packet() function to initiate the DHCP process
+    # dhcp_client.send_discover_packet()
+    #
+    # dns_ip = dhcp_client.DNSserver_ip
+    #
+    # """
+    # *************************************************************
+    #                 DNS query
+    # **************************************************************
+    # """
+    #
+    # # Create a DNSClient object
+    # dns_client = DNSClient()
+    #
+    # # Query the DNS server for the IP address of downloadmanager.com
+    # app_server_ip = dns_client.query("downloadmanager.com")
+    # print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
 
     """
     *************************************************************
                         HTTP request
     **************************************************************
     """
+    app_server_ip = '127.0.0.1'
+
 
     rudp_c = RUDPClient()
     rudp_c.connect(app_server_ip, 20000 + DOVI_LAST3_ID_DIG)

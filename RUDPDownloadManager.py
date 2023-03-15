@@ -103,7 +103,7 @@ class RUDPServer:
                 # Receive a packet and extract its fields
                 type, seq, address, _ = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 # Set the target address to the client address and a fixed port number based on MAOR_LAST3_ID_DIG
-                self.target_address = (address[0], 30000 + MAOR_LAST3_ID_DIG)
+                self.target_address = address
                 # If the packet is a SYN packet, send a SYN-ACK packet back to the client
                 if type == SYN:
                     syn_ack_packet = struct.pack(FORMAT, self.outgoing_seq, SYN_ACK)
@@ -165,10 +165,10 @@ class RUDPServer:
                 self.send_packet_count()
 
             packets = []
-            first_seq_sent = min(self.packets_to_send.items())
+            first_seq_sent = min(self.packets_to_send)
             for seq, data in self.packets_to_send.items():
                 # don't send more packets than what the congestion window allows:
-                if first_seq_sent + seq < self.cwnd:
+                if first_seq_sent + seq <= self.cwnd:
                     packets.append(data)
 
             time_of_sending = time.time()
@@ -196,13 +196,14 @@ class RUDPServer:
         self.close_connection()
 
     def construct_payload(self, data):
-        seq = self.outgoing_seq
-        for i in range((self.file_size + CHUNK) // CHUNK):
-            data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
-            data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
-            self.packets_to_send[seq] = data_packet
-            seq += 1
-        self.outgoing_seq = seq
+        if len(data) > 0:
+            seq = self.outgoing_seq
+            for i in range((self.file_size + CHUNK) // CHUNK):
+                data_packet = struct.pack(FORMAT, seq, DATA_PACKET)
+                data_packet += data[(i * CHUNK):((i + 1) * CHUNK)]
+                self.packets_to_send[seq] = data_packet
+                seq += 1
+            self.outgoing_seq = seq
 
     def send_packet_count(self):
         seq = self.outgoing_seq
@@ -298,6 +299,8 @@ def download_manager():
 
             print("Preparing file for download...")
             rudp_s.construct_payload(data)
+
+            print("flag")
 
             print("Downloading file...")
             rudp_s.send_data()

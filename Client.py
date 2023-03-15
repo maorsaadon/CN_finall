@@ -159,7 +159,14 @@ TIMEOUT = 2  # Default timeout value for the socket
 
 
 def deconstruct_packet(packet):
+    """
+    Helper function to deconstruct a packet into its constituent parts.
+    :param packet: The packet to deconstruct
+    :return: A dictionary with the packet's type, sequence number, source address, and data
+    """
+    # Unpacks the sequence number and packet type from the packet's header
     seq, packet_type = struct.unpack(FORMAT, packet[0][:HEADER_SIZE])
+    # Returns a dictionary containing the packet's type, sequence number, source address, and data
     return {'type': packet_type, 'seq': seq, 'src_address': packet[1], 'data': packet[0][HEADER_SIZE:]}
 
 
@@ -170,7 +177,7 @@ class RUDPClient:
         :param host_adress: port and ip
         """
         self.sock = s.socket(s.AF_INET, s.SOCK_DGRAM)  # Create a UDP socket
-        self.sock.setblocking(False)  # Set socket to non-blocking mode
+        # self.sock.setblocking(False)  # Set socket to non-blocking mode
         self.sock.settimeout(TIMEOUT)  # Set socket timeout to 1 second
         self.received_packets = {}  # Dictionary for holding received data payloads
         self.outgoing_seq = random.randint(0, (2 ** 16))  # Sequence number for outgoing packets
@@ -193,8 +200,8 @@ class RUDPClient:
             # send the SYN packet to the server
             self.sock.sendto(syn_packet, (server_ip, server_port))
 
-            time.sleep(2)  # 2 seconds grace period
-
+            time.sleep(1)  # 2 seconds grace period
+            print(f"Connection: attempt: {i + 1}")
             # receive syn ack
             try:
                 # wait for SYN-ACK response from server
@@ -205,7 +212,7 @@ class RUDPClient:
                     print("Connection with server established...\n")
                     return True
             except socket.timeout:
-                print("Somthing went wrong.....\n")
+                print("Somthing went wrong. trying again...\n")
         self.server_address = None
         return False
 
@@ -232,11 +239,10 @@ class RUDPClient:
             try:
                 type, seq, address, data = deconstruct_packet(self.sock.recvfrom(CHUNK)).values()
                 if type == INFO:
-                    print('filesize')
                     self.received_packets[seq] = {'src address': address, 'data': data}
                     packets_to_be_received = int(data.decode()[19:]) - len(self.received_packets)
+                    print(f"Received file size info. Number of packets to be downloaded is: {packets_to_be_received}\n")
                     self.ack(seq)
-                    print(f"Received file size info. file size to be downloaded is: {packets_to_be_received}\n")
                 if type == DATA:
                     print('Data packet')
                     self.received_packets[seq] = {'src address': address, 'data': data}
@@ -282,33 +288,35 @@ def client_request(url, file_name):
                            DHCP request
     **************************************************************
     """
-
-    # Create a DHCPClient object
-    dhcp_client = DHCPClient()
-
-    # Call the send_discover_packet() function to initiate the DHCP process
-    dhcp_client.send_discover_packet()
-
-    dns_ip = dhcp_client.DNSserver_ip
-
-    """
-    *************************************************************
-                    DNS query
-    **************************************************************
-    """
-
-    # Create a DNSClient object
-    dns_client = DNSClient()
-
-    # Query the DNS server for the IP address of downloadmanager.com
-    app_server_ip = dns_client.query("downloadmanager.com")
-    print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
+    #
+    # # Create a DHCPClient object
+    # dhcp_client = DHCPClient()
+    #
+    # # Call the send_discover_packet() function to initiate the DHCP process
+    # dhcp_client.send_discover_packet()
+    #
+    # dns_ip = dhcp_client.DNSserver_ip
+    #
+    # """
+    # *************************************************************
+    #                 DNS query
+    # **************************************************************
+    # """
+    #
+    # # Create a DNSClient object
+    # dns_client = DNSClient()
+    #
+    # # Query the DNS server for the IP address of downloadmanager.com
+    # app_server_ip = dns_client.query("downloadmanager.com")
+    # print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
 
     """
     *************************************************************
                         HTTP request
     **************************************************************
     """
+
+    app_server_ip = '127.0.0.1'
 
     rudp_c = RUDPClient()
     rudp_c.connect(app_server_ip, 20000 + DOVI_LAST3_ID_DIG)

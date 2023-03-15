@@ -4,6 +4,10 @@ import requests
 DOVI_LAST3_ID_DIG = 494
 MAOR_LAST3_ID_DIG = 421
 
+IP = '127.0.0.1'
+PORT = 20000 + DOVI_LAST3_ID_DIG
+CHUNK = 4096
+
 
 class TCPServer:
     """
@@ -22,38 +26,29 @@ class TCPServer:
         return self.sock
 
 
-IP = '127.0.0.1'
-PORT = 20000 + DOVI_LAST3_ID_DIG
-CHUNK = 1024
-
-
 def download_manager():
 
     tcp_s = TCPServer(IP, PORT)
-    try:
-        tcp_s.bind()
-        print("Ready to serve...\n")
-    except OSError as e:
-        print(f"Error binding to address {IP}:{PORT}: {e}")
-        return
+
+    tcp_s.bind()
 
     tcp_s.socket().listen()
-    _, address = tcp_s.socket().accept()
+
+    print("Listening...")
+
+    connection, address = tcp_s.socket().accept()
 
     print("Connection with client established...\n")
 
-    request_received = False
+    request = connection.recv(CHUNK)
 
-    request = b''
+    print(request)
 
-    while not request_received:
-        try:
-            request = tcp_s.socket().recv(CHUNK)
-        except ConnectionResetError as e:
-            print(f"Error receiving request from client: {e}")
-            return
-        if request:
-            request_received = True
+        # except ConnectionResetError as e:
+        #     print(f"Error receiving request from client: {e}")
+        #     return
+        # if request:
+        #     request_received = True
 
     print("Got HTTP GET request from client")
 
@@ -83,23 +78,22 @@ def download_manager():
     except requests.exceptions.RequestException as e:
         print(f"Error sending request to server: {e}")
         return
-
     if 200 <= response.status_code < 300:
         print("GET request redirection was successful.\n")
     # If the GET request still fails, print an error message and return
     else:
-        tcp_s.socket().sendto(response.content, address)
+        connection.sendto(str(response.status_code).encode() + response.content, address)
         print(f"GET request failed with status code {response.status_code}.\n")
         return
 
     # Retrieve the file data from the response
     print(f"Getting file: {file_name} from: {host_name}...\n")
     print("Retrieving file data...\n")
-    data = response.content
+    data = str(response.status_code).encode() + response.content
 
     print("Sending desired data to client...\n")
     try:
-        tcp_s.socket().sendto(data, address)
+        connection.sendto(data, address)
     except ConnectionResetError as e:
         print(f"Error sending response to client: {e}")
         return
@@ -108,7 +102,7 @@ def download_manager():
 
     print("Closing connection...\n")
 
-    tcp_s.socket().close()
+    connection.close()
 
     print("Connection closed.\n")
 

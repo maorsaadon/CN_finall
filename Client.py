@@ -1,4 +1,5 @@
 # Importing necessary modules for packet manipulation
+import requests
 from scapy.all import *
 # Importing modules for handling DHCP packets
 from scapy.layers.dhcp import DHCP, BOOTP
@@ -376,23 +377,21 @@ def TCP_request(url, file_name, app_server_ip):
     tcp_c = TCPClient()
 
     # Connect to the server
-    connected = tcp_c.connect(app_server_ip, 20000 + DOVI_LAST3_ID_DIG)
-    if not connected:
-        return
+    tcp_c.connect(app_server_ip, 20000 + DOVI_LAST3_ID_DIG)
 
     # Construct the HTTP request
     http_request = f"GET /{file_name} HTTP/1.1\r\nHost: {url}\r\n\r\n".encode()
 
     # Send the HTTP request to the server
     try:
-        tcp_c.socket().send(http_request)
+        tcp_c.socket().sendall(http_request)
         print("Request sent.\n")
     except ConnectionResetError as e:
         print(f"Error sending request to server: {e}")
         return
 
     # Receive the HTTP response from the server
-    response = b''
+    data = b''
     while True:
         try:
             chunk = tcp_c.socket().recv(CHUNK)
@@ -401,35 +400,31 @@ def TCP_request(url, file_name, app_server_ip):
             return
         if not chunk:
             break
-        response += chunk
+        data += chunk
 
     # Deconstruct HTTP response
-    response_lines = response.decode('utf-8').split('\r\n')
-    status_line = response_lines[0]
-    status_code = int(status_line.split()[1])
+    response_status_code = int(data.decode()[:3])
+    print("\n", response_status_code, "\n")
 
-    if status_code == 200:
+    if response_status_code == 200:
         print("HTTP request successful.\n")
     else:
-        print(f"HTTP request failed with status code {status_code}\n")
+        print(f"HTTP request failed with status code {response_status_code}\n")
         return
 
     # Save the file
     print("Saving file...\n")
-    try:
-        with open(file_name, 'w') as f:
-            f.write('\n'.join(response_lines[1:]))
-    except IOError as e:
-        print(f"Error saving file: {e}")
-        return
+    output = data.decode('utf-8')[3:]
+    with open(file_name, 'w') as f:
+        f.write(output)
 
     print("File successfully saved!\n")
 
 
 def client_request(url, file_name, protocol):
 
-    DHCP()
-    app_server_ip = DNS()
+    # DHCP()
+    app_server_ip = '127.0.0.1'  # DNS()
 
     if protocol == "TCP":
         TCP_request(url, file_name, app_server_ip)

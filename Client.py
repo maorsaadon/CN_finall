@@ -288,7 +288,7 @@ class RUDPClient:
 """
 
 
-def DHCP():
+def DHCP_FUNC():
     # Create a DHCPClient object
     dhcp_client = DHCPClient()
 
@@ -305,7 +305,7 @@ def DHCP():
 """
 
 
-def DNS():
+def DNS_FUNC():
     # Create a DNSClient object
     dns_client = DNSClient()
 
@@ -421,11 +421,10 @@ def TCP_request(url, file_name, app_server_ip):
 
 
 def client_request(url, file_name, protocol):
-
     # app_server_ip = '127.0.0.1'
 
-    DHCP()
-    app_server_ip = DNS()
+    DHCP_FUNC()
+    app_server_ip = DNS_FUNC()
 
     if protocol == "TCP":
         TCP_request(url, file_name, app_server_ip)

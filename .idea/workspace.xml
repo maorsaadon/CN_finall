@@ -5,7 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="74163577-641e-4398-894e-cba077dbf9fd" name="Changes" comment="changes">
-      <change afterPath="$PROJECT_DIR$/TCPDownloadManager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RUDPDownloadManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/RUDPDownloadManager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TCPDownloadManager.py" beforeDir="false" afterPath="$PROJECT_DIR$/TCPDownloadManager.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -182,7 +183,13 @@
       <option name="project" value="LOCAL" />
       <updated>1678884002860</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL‎00010" summary="changes">
+      <created>1678888181477</created>
+      <option name="number" value="LOCAL‎00010" />
+      <option name="presentableId" value="LOCAL‎00010" />
+      <updated>1678888181477</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

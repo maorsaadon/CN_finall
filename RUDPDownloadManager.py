@@ -12,7 +12,7 @@ MAOR_LAST3_ID_DIG = 421
 
 # Constants:
 # Maximum data size in packet
-CHUNK = 2048
+CHUNK = 1024
 # Size of packet header
 HEADER_SIZE = 8
 

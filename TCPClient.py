@@ -251,31 +251,38 @@ class HTMLFormServer:
             if request.method == 'POST':
                 host_name = request.form['hostName']
                 file_name = request.form['fileName']
-                client_request(host_name, file_name)
+                protocol = request.form['protocol']
+                client_request(host_name, file_name, protocol)
                 # Do something with the form data (e.g. print it to the console)
                 print("Host Name:", host_name)
                 print("File Name:", file_name)
+                print("Protocol:", protocol)
                 return "Form submitted successfully"
             else:
                 # Serve the HTML file
                 return '''
-                    <!DOCTYPE html>
-                    <html>
-                      <head>
-                        <meta charset="UTF-8">
-                        <title>Web App</title>
-                      </head>
-                      <body>
-                        <form id="myForm" method="post">
-                          <label for="hostName">Host Name:</label>
-                          <input type="text" id="hostName" name="hostName"><br><br>
-                          <label for="fileName">File Name:</label>
-                          <input type="text" id="fileName" name="fileName"><br><br>
-                          <input type="submit" value="Submit Request">
-                        </form>
-                      </body>
-                    </html>
-                '''
+                            <!DOCTYPE html>
+                            <html>
+                              <head>
+                                <meta charset="UTF-8">
+                                <title>Web App</title>
+                              </head>
+                              <body>
+                                <form id="myForm" method="post">
+                                  <label for="hostName">Host Name:</label>
+                                  <input type="text" id="hostName" name="hostName"><br><br>
+                                  <label for="fileName">File Name:</label>
+                                  <input type="text" id="fileName" name="fileName"><br><br>
+                                  <label for="protocol">Protocol:</label>
+                                  <input type="radio" id="TCP" name="protocol" value="TCP">
+                                  <label for="TCP">TCP</label>
+                                  <input type="radio" id="ReliableUDP" name="protocol" value="Reliable UDP">
+                                  <label for="ReliableUDP">Reliable UDP</label><br><br>
+                                  <input type="submit" value="Submit Request">
+                                </form>
+                              </body>
+                            </html>
+                        '''
 
     def run(self, host='localhost', port=5000):
         self.app.run(host=host, port=port)

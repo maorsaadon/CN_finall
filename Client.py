@@ -280,14 +280,15 @@ class RUDPClient:
         self.increment_seq()
         print(f"Sent ACK for seq: {seq}\n")
 
+
 """
 *************************************************************
                        DHCP request
 **************************************************************
 """
 
-def DHCP():
 
+def DHCP():
     # Create a DHCPClient object
     dhcp_client = DHCPClient()
 
@@ -302,8 +303,9 @@ def DHCP():
                 DNS query
 **************************************************************
 """
-def DNS():
 
+
+def DNS():
     # Create a DNSClient object
     dns_client = DNSClient()
 
@@ -314,7 +316,6 @@ def DNS():
 
 
 def RUDP_request(url, file_name, app_server_ip):
-
     rudp_c = RUDPClient()
     rudp_c.connect(app_server_ip, 20000 + DOVI_LAST3_ID_DIG)
 
@@ -373,7 +374,6 @@ class TCPClient:
 
 
 def TCP_request(url, file_name, app_server_ip):
-
     tcp_c = TCPClient()
 
     # Connect to the server
@@ -404,7 +404,6 @@ def TCP_request(url, file_name, app_server_ip):
 
     # Deconstruct HTTP response
     response_status_code = int(data.decode()[:3])
-    print("\n", response_status_code, "\n")
 
     if response_status_code == 200:
         print("HTTP request successful.\n")
@@ -422,6 +421,8 @@ def TCP_request(url, file_name, app_server_ip):
 
 
 def client_request(url, file_name, protocol):
+
+    # app_server_ip = '127.0.0.1'
 
     DHCP()
     app_server_ip = DNS()

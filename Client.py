@@ -347,6 +347,8 @@ def client_request(url, file_name):
     else:
         print("Something went wrong!")
 
+    return
+
 
 class HTMLFormServer:
 

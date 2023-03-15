@@ -418,14 +418,15 @@ def TCP_request(url, file_name, app_server_ip):
         f.write(output)
 
     print("File successfully saved!\n")
+    return
 
 
 def client_request(url, file_name, protocol):
 
-    # app_server_ip = '127.0.0.1'
+    app_server_ip = '127.0.0.1'
 
-    DHCP()
-    app_server_ip = DNS()
+    # DHCP()
+    # app_server_ip = DNS()
 
     if protocol == "TCP":
         TCP_request(url, file_name, app_server_ip)

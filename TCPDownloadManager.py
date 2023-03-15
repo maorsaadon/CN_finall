@@ -44,12 +44,6 @@ def download_manager():
 
     print(request)
 
-        # except ConnectionResetError as e:
-        #     print(f"Error receiving request from client: {e}")
-        #     return
-        # if request:
-        #     request_received = True
-
     print("Got HTTP GET request from client")
 
     # Extract the file name and host name from the request data
@@ -105,6 +99,8 @@ def download_manager():
     connection.close()
 
     print("Connection closed.\n")
+
+    return
 
 
 if __name__ == '__main__':

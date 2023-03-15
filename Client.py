@@ -279,13 +279,13 @@ class RUDPClient:
         self.increment_seq()
         print(f"Sent ACK for seq: {seq}\n")
 
+"""
+*************************************************************
+                       DHCP request
+**************************************************************
+"""
 
-def RUDP_request(url, file_name):
-    """
-    *************************************************************
-                           DHCP request
-    **************************************************************
-    """
+def DHCP():
 
     # Create a DHCPClient object
     dhcp_client = DHCPClient()
@@ -295,11 +295,13 @@ def RUDP_request(url, file_name):
 
     dns_ip = dhcp_client.DNSserver_ip
 
-    """
-    *************************************************************
-                    DNS query
-    **************************************************************
-    """
+
+"""
+*************************************************************
+                DNS query
+**************************************************************
+"""
+def DNS():
 
     # Create a DNSClient object
     dns_client = DNSClient()
@@ -307,12 +309,10 @@ def RUDP_request(url, file_name):
     # Query the DNS server for the IP address of downloadmanager.com
     app_server_ip = dns_client.query("downloadmanager.com")
     print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
+    return app_server_ip
 
-    """
-    *************************************************************
-                        HTTP request
-    **************************************************************
-    """
+
+def RUDP_request(url, file_name, app_server_ip):
 
     rudp_c = RUDPClient()
     rudp_c.connect(app_server_ip, 20000 + DOVI_LAST3_ID_DIG)
@@ -371,33 +371,8 @@ class TCPClient:
         return True
 
 
-def TCP_request(url, file_name):
-    """
-    *************************************************************
-                           DHCP request
-    **************************************************************
-    """
+def TCP_request(url, file_name, app_server_ip):
 
-    # Create a DHCPClient object
-    dhcp_client = DHCPClient()
-
-    # Call the send_discover_packet() function to initiate the DHCP process
-    dhcp_client.send_discover_packet()
-
-    dns_ip = dhcp_client.DNSserver_ip
-
-    """
-    *************************************************************
-                    DNS query
-    **************************************************************
-    """
-
-    # Create a DNSClient object
-    dns_client = DNSClient()
-
-    # Query the DNS server for the IP address of downloadmanager.com
-    app_server_ip = dns_client.query("downloadmanager.com")
-    print('http app domain: downloadmanager.com, http app ip: ' + app_server_ip)
     tcp_c = TCPClient()
 
     # Connect to the server
@@ -452,10 +427,12 @@ def TCP_request(url, file_name):
 
 
 def client_request(url, file_name, protocol):
+    DHCP()
+    app_server_ip = DNS()
     if protocol == "ReliableUDP":
-        RUDP_request(url, file_name)
+        RUDP_request(url, file_name, app_server_ip)
     else:
-        TCP_request(url, file_name)
+        TCP_request(url, file_name, app_server_ip)
 
 
 class HTMLFormServer:
